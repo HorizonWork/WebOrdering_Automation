@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.utils.logger import get_logger
+from src.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -207,11 +207,11 @@ class SafetyGuardrails:
                     logger.warning(f"⚠️  Sensitive action detected: {category} - {keyword}")
                     
                     if self.strict_mode:
-                        logger.warning(f"🚫 Action blocked in strict mode")
+                        logger.warning("🚫 Action blocked in strict mode")
                         return False
                     
                     if require_confirmation:
-                        logger.info(f"🔔 Action requires confirmation")
+                        logger.info("🔔 Action requires confirmation")
                         # In production, this would prompt user
                         # For now, block in strict mode
                         return not self.strict_mode
@@ -222,7 +222,7 @@ class SafetyGuardrails:
                 logger.warning(f"⚠️  High-risk pattern detected: {risk_type}")
                 
                 if self.strict_mode:
-                    logger.warning(f"🚫 Action blocked due to risk pattern")
+                    logger.warning("🚫 Action blocked due to risk pattern")
                     return False
         
         # Allowed

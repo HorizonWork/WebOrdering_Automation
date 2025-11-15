@@ -35,3 +35,4 @@ data/raw/intents/
 # Large model files
 models/
 model_weights/
+temp/

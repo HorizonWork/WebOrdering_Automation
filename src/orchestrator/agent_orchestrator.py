@@ -14,16 +14,16 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.models.phobert_encoder import PhoBERTEncoder, PhoBERTEncoderConfig
-from src.models.vit5_planner import ViT5Planner
-from src.perception.dom_distiller import DOMDistiller
-from src.planning.react_engine import ReActEngine
-from src.execution.browser_manager import BrowserManager
-from src.execution.skill_executor import SkillExecutor
-from src.orchestrator.state_manager import StateManager
-from src.orchestrator.safety_guardrails import SafetyGuardrails
-from config.settings import settings
-from src.utils.logger import get_logger
+from src.models.phobert_encoder import PhoBERTEncoder, PhoBERTEncoderConfig # noqa: E402
+from src.models.vit5_planner import ViT5Planner  # noqa: E402
+from src.perception.dom_distiller import DOMDistiller  # noqa: E402
+from src.planning.react_engine import ReActEngine  # noqa: E402
+from src.execution.browser_manager import BrowserManager  # noqa: E402
+from src.execution.skill_executor import SkillExecutor  # noqa: E402
+from src.orchestrator.state_manager import StateManager  # noqa: E402
+from src.orchestrator.safety_guardrails import SafetyGuardrails  # noqa: E402
+from config.settings import settings  # noqa: E402
+from src.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -62,8 +62,8 @@ class AgentOrchestrator:
     
     def __init__(
         self,
-        max_steps: int = None,
-        headless: bool = None,
+        max_steps: Optional[int | None] = None,
+        headless: Optional[bool | None] = None,
         enable_learning: bool = True,
         enable_guardrails: bool = True,
         phobert_checkpoint: str | None = None,
@@ -108,8 +108,8 @@ class AgentOrchestrator:
             else None
         )
         self.phobert = PhoBERTEncoder(override_config=phobert_config)
-        self.vit5 = ViT5Planner(model_name=self.vit5_checkpoint)
-        
+        self.vit5 = ViT5Planner(model_name=self.vit5_checkpoint)  
+
         # Perception
         logger.info("  → Initializing perception...")
         self.dom_distiller = DOMDistiller()
@@ -301,16 +301,18 @@ class AgentOrchestrator:
             # Close browser on error
             try:
                 await self.browser_manager.close()
-            except:
+            except:  
                 pass
             
             execution_time = (datetime.now() - start_time).total_seconds()
             
             return ExecutionResult(
                 success=False,
-                steps=step if 'step' in locals() else 0,
+                steps=step if "step" in locals() else 0,  
                 final_state={},
-                history=self.react_engine.get_history() if hasattr(self, 'react_engine') else [],
+                history=self.react_engine.get_history()
+                if hasattr(self, "react_engine")
+                else [],
                 error=str(e),
                 execution_time=execution_time,
                 final_url=start_url,
