@@ -1,12 +1,13 @@
 """
 DOM Distiller - Clean and simplify HTML for LLM consumption
 Based on Agent-E's DOM distillation approach
+FIXED: Added robust None-safety checks for all operations
 """
 
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 import re
 
 # Add project root to path
@@ -87,97 +88,218 @@ class DOMDistiller:
         Returns:
             Distilled HTML string
         """
-        if not html:
+        if not html or not isinstance(html, str):
             return ""
         
         logger.debug(f"Distilling HTML ({len(html)} chars) in mode: {mode}")
         
-        soup = BeautifulSoup(html, 'html.parser')
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # Remove noise
+            self._remove_noise(soup)
+            
+            # Apply distillation based on mode
+            if mode == 'text_only':
+                distilled = self._distill_text_only(soup)
+            elif mode == 'structure':
+                distilled = self._distill_structure(soup)
+            else:  # full
+                distilled = self._distill_full(soup)
+            
+            # Truncate if too long
+            if len(distilled) > self.max_dom_size:
+                logger.warning(f"DOM truncated: {len(distilled)} → {self.max_dom_size} chars")
+                distilled = distilled[:self.max_dom_size] + "\n<!-- TRUNCATED -->"
+            
+            logger.debug(f"Distilled: {len(html)} → {len(distilled)} chars ({len(distilled)/len(html)*100:.1f}%)")
+            
+            return distilled
         
-        # Remove noise
-        self._remove_noise(soup)
-        
-        # Apply distillation based on mode
-        if mode == 'text_only':
-            distilled = self._distill_text_only(soup)
-        elif mode == 'structure':
-            distilled = self._distill_structure(soup)
-        else:  # full
-            distilled = self._distill_full(soup)
-        
-        # Truncate if too long
-        if len(distilled) > self.max_dom_size:
-            logger.warning(f"DOM truncated: {len(distilled)} → {self.max_dom_size} chars")
-            distilled = distilled[:self.max_dom_size] + "\n<!-- TRUNCATED -->"
-        
-        logger.debug(f"Distilled: {len(html)} → {len(distilled)} chars ({len(distilled)/len(html)*100:.1f}%)")
-        
-        return distilled
+        except Exception as e:
+            logger.error(f"Distillation failed: {e}")
+            return ""
     
     def _remove_noise(self, soup: BeautifulSoup):
-        """Remove noisy elements"""
-        # Remove scripts, styles, etc.
-        for tag in soup(['script', 'style', 'noscript', 'meta', 'link', 
-                        'svg', 'img', 'video', 'audio', 'iframe']):
-            tag.decompose()
+        """Remove noisy elements with robust None-safety"""
+        if not soup:
+            return
         
-        # Remove hidden elements
-        for tag in soup.find_all():
-            style = tag.get('style', '')
-            if 'display:none' in style or 'display: none' in style:
-                tag.decompose()
+        # Remove scripts, styles, etc.
+        noise_tags = ['script', 'style', 'noscript', 'meta', 'link', 
+                     'svg', 'img', 'video', 'audio', 'iframe']
+        
+        for tag_name in noise_tags:
+            try:
+                for tag in soup.find_all(tag_name):
+                    if tag and hasattr(tag, 'decompose'):
+                        tag.decompose()
+            except Exception as e:
+                logger.debug(f"Error removing {tag_name}: {e}")
+                continue
+        
+        # Remove comments
+        try:
+            for comment in soup.find_all(text=lambda text: isinstance(text, Comment)):
+                if comment and hasattr(comment, 'extract'):
+                    comment.extract()
+        except Exception as e:
+            logger.debug(f"Error removing comments: {e}")
+        
+        # Remove hidden elements (ROBUST None checks)
+        try:
+            all_tags = list(soup.find_all(True))  # Convert to list to avoid modification during iteration
+            
+            for tag in all_tags:
+                # Skip if None or malformed
+                if tag is None or not hasattr(tag, 'attrs'):
+                    continue
+                
+                # Skip if attrs is None
+                if tag.attrs is None:
+                    continue
+                
+                try:
+                    # Safe get style
+                    style = ''
+                    if isinstance(tag.attrs, dict):
+                        style = tag.attrs.get('style', '')
+                    
+                    # Check if hidden
+                    if style and isinstance(style, str):
+                        style_lower = style.lower().replace(' ', '')
+                        if 'display:none' in style_lower or 'visibility:hidden' in style_lower:
+                            if hasattr(tag, 'decompose'):
+                                tag.decompose()
+                            continue
+                    
+                    # Safe get class
+                    classes = []
+                    if isinstance(tag.attrs, dict):
+                        classes = tag.attrs.get('class', [])
+                    
+                    # Check if has hidden class
+                    if classes:
+                        class_str = ' '.join(classes) if isinstance(classes, list) else str(classes)
+                        class_lower = class_str.lower()
+                        
+                        hidden_keywords = ['hidden', 'hide', 'd-none', 'invisible', 'display-none']
+                        if any(kw in class_lower for kw in hidden_keywords):
+                            if hasattr(tag, 'decompose'):
+                                tag.decompose()
+                            continue
+                
+                except (AttributeError, TypeError, KeyError) as e:
+                    # Skip malformed tags
+                    logger.debug(f"Error processing tag: {e}")
+                    continue
+        
+        except Exception as e:
+            logger.warning(f"Error removing hidden elements: {e}")
     
     def _distill_text_only(self, soup: BeautifulSoup) -> str:
         """Keep only interactive elements"""
-        # Remove all non-interactive elements
-        for tag in soup.find_all():
-            if tag.name not in self.interactive_tags:
-                # Check if has interactive children
-                has_interactive = bool(tag.find_all(self.interactive_tags))
-                if not has_interactive:
-                    tag.decompose()
+        if not soup:
+            return ""
         
-        # Clean attributes
-        for tag in soup.find_all():
-            attrs_to_keep = {
-                k: v for k, v in tag.attrs.items()
-                if k in self.important_attrs
-            }
-            tag.attrs = attrs_to_keep
+        try:
+            # Convert to list to avoid modification during iteration
+            all_tags = list(soup.find_all(True))
+            
+            for tag in all_tags:
+                if not tag or tag.name is None:
+                    continue
+                
+                if tag.name not in self.interactive_tags:
+                    # Check if has interactive children
+                    has_interactive = bool(tag.find_all(self.interactive_tags))
+                    if not has_interactive and hasattr(tag, 'decompose'):
+                        tag.decompose()
+            
+            # Clean attributes
+            for tag in soup.find_all(True):
+                if not tag or not hasattr(tag, 'attrs') or tag.attrs is None:
+                    continue
+                
+                try:
+                    if isinstance(tag.attrs, dict):
+                        attrs_to_keep = {
+                            k: v for k, v in tag.attrs.items()
+                            if k in self.important_attrs
+                        }
+                        tag.attrs = attrs_to_keep
+                except Exception:
+                    tag.attrs = {}
+            
+            return str(soup)
         
-        return str(soup)
+        except Exception as e:
+            logger.error(f"Text-only distillation failed: {e}")
+            return ""
     
     def _distill_structure(self, soup: BeautifulSoup) -> str:
         """Keep structure but clean attributes"""
-        # Keep structure (div, span, p, etc.)
-        # But clean attributes
-        for tag in soup.find_all():
-            # Only keep important attrs
-            attrs_to_keep = {}
-            for k, v in tag.attrs.items():
-                if k in self.important_attrs or k.startswith('data-'):
-                    # Truncate long values
-                    if isinstance(v, str) and len(v) > 100:
-                        v = v[:100] + "..."
-                    attrs_to_keep[k] = v
-            
-            tag.attrs = attrs_to_keep
+        if not soup:
+            return ""
         
-        return str(soup)
+        try:
+            for tag in soup.find_all(True):
+                if not tag or not hasattr(tag, 'attrs') or tag.attrs is None:
+                    continue
+                
+                try:
+                    # Only keep important attrs
+                    attrs_to_keep = {}
+                    
+                    if isinstance(tag.attrs, dict):
+                        for k, v in tag.attrs.items():
+                            if k in self.important_attrs or k.startswith('data-'):
+                                # Truncate long values
+                                if isinstance(v, str) and len(v) > 100:
+                                    v = v[:100] + "..."
+                                attrs_to_keep[k] = v
+                    
+                    tag.attrs = attrs_to_keep
+                
+                except Exception:
+                    tag.attrs = {}
+            
+            return str(soup)
+        
+        except Exception as e:
+            logger.error(f"Structure distillation failed: {e}")
+            return ""
     
     def _distill_full(self, soup: BeautifulSoup) -> str:
         """Keep everything but clean"""
-        # Just clean attributes
-        for tag in soup.find_all():
-            # Remove inline styles and event handlers
-            attrs_to_remove = [
-                k for k in tag.attrs.keys()
-                if k.startswith('on') or k == 'style'
-            ]
-            for attr in attrs_to_remove:
-                del tag.attrs[attr]
+        if not soup:
+            return ""
         
-        return str(soup)
+        try:
+            for tag in soup.find_all(True):
+                if not tag or not hasattr(tag, 'attrs') or tag.attrs is None:
+                    continue
+                
+                try:
+                    if isinstance(tag.attrs, dict):
+                        # Remove inline styles and event handlers
+                        attrs_to_remove = [
+                            k for k in list(tag.attrs.keys())
+                            if k.startswith('on') or k == 'style'
+                        ]
+                        for attr in attrs_to_remove:
+                            try:
+                                del tag.attrs[attr]
+                            except KeyError:
+                                pass
+                except Exception:
+                    pass
+            
+            return str(soup)
+        
+        except Exception as e:
+            logger.error(f"Full distillation failed: {e}")
+            return ""
     
     def extract_interactive_elements(self, html: str) -> List[Dict]:
         """
@@ -186,56 +308,86 @@ class DOMDistiller:
         Returns:
             List of dicts with {id, tag, text, selector, attributes}
         """
-        soup = BeautifulSoup(html, 'html.parser')
-        self._remove_noise(soup)
+        if not html:
+            return []
         
-        elements = []
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            self._remove_noise(soup)
+            
+            elements = []
+            
+            for idx, tag in enumerate(soup.find_all(self.interactive_tags)):
+                if not tag:
+                    continue
+                
+                try:
+                    # Get text (truncated)
+                    text = ''
+                    if hasattr(tag, 'get_text'):
+                        text = tag.get_text(strip=True)
+                        if len(text) > 100:
+                            text = text[:100] + "..."
+                    
+                    # Get important attributes
+                    attrs = {}
+                    if hasattr(tag, 'attrs') and isinstance(tag.attrs, dict):
+                        attrs = {
+                            k: v for k, v in tag.attrs.items()
+                            if k in self.important_attrs
+                        }
+                    
+                    # Generate selector
+                    selector = self._generate_selector(tag, idx)
+                    
+                    element = {
+                        'id': idx,
+                        'tag': tag.name if hasattr(tag, 'name') else 'unknown',
+                        'text': text,
+                        'selector': selector,
+                        'attributes': attrs
+                    }
+                    
+                    elements.append(element)
+                    
+                    # Stop if max reached
+                    if len(elements) >= self.max_elements:
+                        logger.warning(f"Max elements reached: {self.max_elements}")
+                        break
+                
+                except Exception as e:
+                    logger.debug(f"Error extracting element {idx}: {e}")
+                    continue
+            
+            logger.info(f"✓ Extracted {len(elements)} interactive elements")
+            return elements
         
-        for idx, tag in enumerate(soup.find_all(self.interactive_tags)):
-            # Get text (truncated)
-            text = tag.get_text(strip=True)
-            if len(text) > 100:
-                text = text[:100] + "..."
-            
-            # Get important attributes
-            attrs = {
-                k: v for k, v in tag.attrs.items()
-                if k in self.important_attrs
-            }
-            
-            # Generate selector
-            selector = self._generate_selector(tag, idx)
-            
-            element = {
-                'id': idx,
-                'tag': tag.name,
-                'text': text,
-                'selector': selector,
-                'attributes': attrs
-            }
-            
-            elements.append(element)
-            
-            # Stop if max reached
-            if len(elements) >= self.max_elements:
-                logger.warning(f"Max elements reached: {self.max_elements}")
-                break
-        
-        logger.info(f"✓ Extracted {len(elements)} interactive elements")
-        return elements
+        except Exception as e:
+            logger.error(f"Element extraction failed: {e}")
+            return []
     
-    def _generate_selector(self, tag: BeautifulSoup, fallback_idx: int) -> str:
-        """Generate CSS selector for element"""
-        # Priority: id > name > class > nth-of-type
-        if tag.get('id'):
-            return f"#{tag['id']}"
-        elif tag.get('name'):
-            return f"{tag.name}[name='{tag['name']}']"
-        elif tag.get('class'):
-            classes = '.'.join(tag['class'][:2])  # Max 2 classes
-            return f"{tag.name}.{classes}"
-        else:
+    def _generate_selector(self, tag, fallback_idx: int) -> str:
+        """Generate CSS selector for element (with None-safety)"""
+        if not tag or not hasattr(tag, 'name'):
+            return f"unknown-{fallback_idx}"
+        
+        try:
+            # Priority: id > name > class > nth-of-type
+            if hasattr(tag, 'attrs') and isinstance(tag.attrs, dict):
+                if tag.attrs.get('id'):
+                    return f"#{tag.attrs['id']}"
+                elif tag.attrs.get('name'):
+                    return f"{tag.name}[name='{tag.attrs['name']}']"
+                elif tag.attrs.get('class'):
+                    classes = tag.attrs['class']
+                    if isinstance(classes, list) and classes:
+                        classes_str = '.'.join(classes[:2])  # Max 2 classes
+                        return f"{tag.name}.{classes_str}"
+            
             return f"{tag.name}:nth-of-type({fallback_idx + 1})"
+        
+        except Exception:
+            return f"{tag.name}-{fallback_idx}"
     
     def annotate_with_ids(self, html: str, prefix: str = "mmid") -> str:
         """
@@ -248,15 +400,63 @@ class DOMDistiller:
         Returns:
             Annotated HTML
         """
-        soup = BeautifulSoup(html, 'html.parser')
+        if not html:
+            return ""
         
-        idx = 0
-        for tag in soup.find_all(self.interactive_tags):
-            tag[prefix] = f"{prefix}-{idx}"
-            idx += 1
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            idx = 0
+            for tag in soup.find_all(self.interactive_tags):
+                if tag and hasattr(tag, '__setitem__'):
+                    try:
+                        tag[prefix] = f"{prefix}-{idx}"
+                        idx += 1
+                    except Exception:
+                        pass
+            
+            logger.info(f"✓ Annotated {idx} elements with {prefix} IDs")
+            return str(soup)
         
-        logger.info(f"✓ Annotated {idx} elements with {prefix} IDs")
-        return str(soup)
+        except Exception as e:
+            logger.error(f"Annotation failed: {e}")
+            return html
+    
+    def find_action_buttons(self, html: str, action_type: str = 'submit') -> List[Dict]:
+        """Find specific action buttons (e.g., submit, cancel, etc.)"""
+        if not html:
+            return []
+        
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            buttons = []
+            
+            # Find buttons and inputs
+            for tag in soup.find_all(['button', 'input']):
+                if not tag:
+                    continue
+                
+                try:
+                    tag_type = ''
+                    if hasattr(tag, 'attrs') and isinstance(tag.attrs, dict):
+                        tag_type = tag.attrs.get('type', '').lower()
+                    
+                    if action_type in tag_type:
+                        text = tag.get_text(strip=True) if hasattr(tag, 'get_text') else ''
+                        buttons.append({
+                            'tag': tag.name if hasattr(tag, 'name') else 'unknown',
+                            'type': tag_type,
+                            'text': text,
+                            'selector': self._generate_selector(tag, len(buttons))
+                        })
+                except Exception:
+                    continue
+            
+            return buttons
+        
+        except Exception as e:
+            logger.error(f"Button search failed: {e}")
+            return []
 
 
 # Test

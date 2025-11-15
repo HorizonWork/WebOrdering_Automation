@@ -431,7 +431,7 @@ if __name__ == "__main__":
     print("Ready to train!")
     print("=" * 60)
     print("\nTo start training, run:")
-    print("```
+    print("```")
     print("trainer.train(")
     print("    train_data=training_data,")
     print("    eval_data=eval_data,")

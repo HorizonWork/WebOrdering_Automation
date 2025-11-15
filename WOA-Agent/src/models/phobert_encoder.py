@@ -10,11 +10,27 @@ from typing import List, Union, Optional
 import numpy as np
 from pathlib import Path
 import yaml
+from dataclasses import dataclass
 
 from config.settings import settings
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class PhoBERTEncoderConfig:
+    """Configuration override for PhoBERTEncoder."""
+
+    model_name_or_path: str = "vinai/phobert-base-v2"
+    device: Optional[str] = None
+    cache_dir: Optional[str] = None
+    max_length: int = 256
+    batch_size: int = 32
+    normalize: bool = True
+
+
+__all__ = ["PhoBERTEncoder", "PhoBERTEncoderConfig"]
 
 
 class PhoBERTEncoder:
@@ -49,7 +65,8 @@ class PhoBERTEncoder:
         self,
         model_name: Optional[str] = None,
         device: Optional[str] = None,
-        cache_dir: Optional[str] = None
+        cache_dir: Optional[str] = None,
+        override_config: Optional[PhoBERTEncoderConfig] = None,
     ):
         """
         Initialize PhoBERT encoder.
@@ -58,23 +75,42 @@ class PhoBERTEncoder:
             model_name: PhoBERT model identifier (default: vinai/phobert-base-v2)
             device: cuda/cpu/mps (default from settings)
             cache_dir: Model cache directory
+            config: Optional PhoBERTEncoderConfig override
         """
         # Load config from YAML if exists
         config_path = Path("config/models.yaml")
         if config_path.exists():
             with open(config_path) as f:
-                config = yaml.safe_load(f)
-                phobert_config = config.get('phobert', {})
+                config_data = yaml.safe_load(f)
+                phobert_config = config_data.get('phobert', {})
         else:
             phobert_config = {}
         
+        # Apply overrides
+        override = override_config
+        
         # Settings
-        self.model_name = model_name or phobert_config.get('model_name', 'vinai/phobert-base-v2')
-        self.device = device or settings.device
-        self.max_length = phobert_config.get('max_length', 256)
-        self.batch_size = phobert_config.get('batch_size', 32)
-        self.normalize = phobert_config.get('normalize', True)
-        self.cache_dir = cache_dir or phobert_config.get('cache_dir', './checkpoints/phobert')
+        self.model_name = (
+            override.model_name_or_path if override
+            else model_name or phobert_config.get('model_name', 'vinai/phobert-base-v2')
+        )
+        self.device = (
+            override.device if override and override.device
+            else device or settings.device
+        )
+        self.max_length = (
+            override.max_length if override else phobert_config.get('max_length', 256)
+        )
+        self.batch_size = (
+            override.batch_size if override else phobert_config.get('batch_size', 32)
+        )
+        self.normalize = (
+            override.normalize if override is not None else phobert_config.get('normalize', True)
+        )
+        self.cache_dir = (
+            override.cache_dir if override and override.cache_dir
+            else cache_dir or phobert_config.get('cache_dir', './checkpoints/phobert')
+        )
         
         logger.info(f"🚀 Loading PhoBERT from {self.model_name}")
         logger.info(f"📍 Device: {self.device}")

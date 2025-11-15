@@ -7,8 +7,14 @@ import asyncio
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
+import sys
+from pathlib import Path
 
-from src.models.phobert_encoder import PhoBERTEncoder
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from src.models.phobert_encoder import PhoBERTEncoder, PhoBERTEncoderConfig
 from src.models.vit5_planner import ViT5Planner
 from src.perception.dom_distiller import DOMDistiller
 from src.planning.react_engine import ReActEngine
@@ -32,6 +38,8 @@ class ExecutionResult:
     error: Optional[str] = None
     execution_time: float = 0.0
     metadata: Dict = field(default_factory=dict)
+    final_url: Optional[str] = None
+    summary: str = ""
 
 
 class AgentOrchestrator:
@@ -57,7 +65,9 @@ class AgentOrchestrator:
         max_steps: int = None,
         headless: bool = None,
         enable_learning: bool = True,
-        enable_guardrails: bool = True
+        enable_guardrails: bool = True,
+        phobert_checkpoint: str | None = None,
+        vit5_checkpoint: str | None = None,
     ):
         """
         Initialize orchestrator.
@@ -72,6 +82,8 @@ class AgentOrchestrator:
         self.headless = headless if headless is not None else settings.headless
         self.enable_learning = enable_learning
         self.enable_guardrails = enable_guardrails
+        self.phobert_checkpoint = phobert_checkpoint
+        self.vit5_checkpoint = vit5_checkpoint
         
         logger.info("🚀 Initializing Agent Orchestrator")
         logger.info(f"   Max steps: {self.max_steps}")
@@ -90,8 +102,13 @@ class AgentOrchestrator:
         
         # Models
         logger.info("  → Loading models...")
-        self.phobert = PhoBERTEncoder()
-        self.vit5 = ViT5Planner()
+        phobert_config = (
+            PhoBERTEncoderConfig(model_name_or_path=self.phobert_checkpoint)
+            if self.phobert_checkpoint
+            else None
+        )
+        self.phobert = PhoBERTEncoder(override_config=phobert_config)
+        self.vit5 = ViT5Planner(model_name=self.vit5_checkpoint)
         
         # Perception
         logger.info("  → Initializing perception...")
@@ -160,7 +177,11 @@ class AgentOrchestrator:
                         steps=0,
                         final_state={},
                         history=[],
-                        error=f"URL blocked by safety guardrails: {start_url}"
+                        error=f"URL blocked by safety guardrails: {start_url}",
+                        execution_time=0.0,
+                        metadata={'reason': 'guardrail_block'},
+                        final_url=start_url,
+                        summary=f"Blocked by safety guardrails for URL: {start_url}",
                     )
             
             # Initialize browser
@@ -246,6 +267,7 @@ class AgentOrchestrator:
             success = last_action and last_action.get('skill') == 'complete'
             history = self.react_engine.get_history()
             
+            final_url = page.url if page else start_url
             result = ExecutionResult(
                 success=success,
                 steps=step,
@@ -255,8 +277,10 @@ class AgentOrchestrator:
                 metadata={
                     'query': query,
                     'start_url': start_url,
-                    'final_url': page.url if page else start_url
-                }
+                    'final_url': final_url
+                },
+                final_url=final_url,
+                summary=f"Success={success}, steps={step}, final_url={final_url}",
             )
             
             # Log summary
@@ -288,7 +312,9 @@ class AgentOrchestrator:
                 final_state={},
                 history=self.react_engine.get_history() if hasattr(self, 'react_engine') else [],
                 error=str(e),
-                execution_time=execution_time
+                execution_time=execution_time,
+                final_url=start_url,
+                summary=f"Failed after {step if 'step' in locals() else 0} steps: {e}",
             )
     
     async def _perceive(self, page) -> Dict:
@@ -330,11 +356,18 @@ class AgentOrchestrator:
     def get_execution_summary(self) -> str:
         """Get execution summary"""
         return self.react_engine.get_summary()
+
+    async def close(self) -> None:
+        """Gracefully release resources."""
+        if hasattr(self, "browser_manager") and self.browser_manager:
+            await self.browser_manager.close()
+        logger.info("AgentOrchestrator closed resources")
     
     def __del__(self):
         """Cleanup"""
         try:
-            asyncio.create_task(self.browser_manager.close())
+            if hasattr(self, "browser_manager"):
+                asyncio.create_task(self.browser_manager.close())
         except:
             pass
 
