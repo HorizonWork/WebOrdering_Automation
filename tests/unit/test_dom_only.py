@@ -4,9 +4,9 @@ import asyncio
 from pathlib import Path
 import sys
 
-# Add project root
-ROOT_DIR = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT_DIR))
+import path_setup  # noqa: F401
+
+ROOT_DIR = path_setup.PROJECT_ROOT
 
 # Import trực tiếp, tránh __init__.py
 from src.execution.browser_manager import BrowserManager

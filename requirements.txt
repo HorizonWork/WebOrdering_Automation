@@ -58,6 +58,7 @@ polars==0.19.11
 Pillow==10.1.0
 opencv-python==4.8.1.78
 imageio==2.33.1
+ultralytics==8.1.0
 
 # Configuration Management
 omegaconf==2.3.0

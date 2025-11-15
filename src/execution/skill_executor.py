@@ -19,6 +19,7 @@ from src.execution.skills import (
     ValidationSkills,
     WaitSkills
 )
+from src.execution.omni_passer import OmniPasser
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -50,6 +51,7 @@ class SkillExecutor:
         self.observation = ObservationSkills()
         self.validation = ValidationSkills()
         self.wait = WaitSkills()
+        self.omnipasser = OmniPasser()
         
         # Map skill names to handlers
         self.skill_map = {
@@ -86,7 +88,8 @@ class SkillExecutor:
             'wait_for_navigation': self.wait.wait_for_navigation,
             
             # Special
-            'complete': self._complete
+            'complete': self._complete,
+            'omni_login': self.omnipasser.login,
         }
         
         logger.info(f"SkillExecutor initialized ({len(self.skill_map)} skills)")

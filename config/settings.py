@@ -44,6 +44,12 @@ class Settings:
     log_level: str = field(default_factory=lambda: os.getenv("AGENT_LOG_LEVEL", "INFO"))
     data_dir: str = field(default_factory=lambda: os.getenv("AGENT_DATA_DIR", "data"))
     device: str = field(default_factory=lambda: os.getenv("AGENT_DEVICE", "cuda" if _env_bool("CUDA_AVAILABLE", False) else "cpu"))
+    enable_vision: bool = field(default_factory=lambda: _env_bool("ENABLE_VISION", True))
+    yolo_model_path: str = field(default_factory=lambda: os.getenv("YOLO_MODEL_PATH", "checkpoints/yolov8_bestm.pt"))
+    florence_base_model: str = field(default_factory=lambda: os.getenv("FLORENCE_BASE_MODEL", "microsoft/Florence-2-base"))
+    florence_adapter_path: str = field(default_factory=lambda: os.getenv("FLORENCE_ADAPTER_PATH", "checkpoints/florence"))
+    omnipasser_email: str = field(default_factory=lambda: os.getenv("OMNIPASSER_EMAIL", ""))
+    omnipasser_password: str = field(default_factory=lambda: os.getenv("OMNIPASSER_PASSWORD", ""))
     
     # Chrome Profile settings
     use_chrome_profile: bool = field(default_factory=lambda: _env_bool("USE_CHROME_PROFILE", False))

@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import sys
 from pathlib import Path
+import hashlib
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
@@ -67,7 +68,8 @@ class StateManager:
             observation: Observation dict from perception layer
         """
         # Create state
-        dom_hash = hash(observation.get('dom', ''))
+        dom_content = observation.get('dom', '') or ''
+        dom_hash = hashlib.sha256(dom_content.encode('utf-8')).hexdigest()
         
         state = State(
             url=observation.get('url', ''),

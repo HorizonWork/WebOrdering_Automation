@@ -22,6 +22,7 @@ from src.execution.browser_manager import BrowserManager  # noqa: E402
 from src.execution.skill_executor import SkillExecutor  # noqa: E402
 from src.orchestrator.state_manager import StateManager  # noqa: E402
 from src.orchestrator.safety_guardrails import SafetyGuardrails  # noqa: E402
+from src.perception.vision_enhancer import VisionEnhancer  # noqa: E402
 from config.settings import settings  # noqa: E402
 from src.utils.logger import get_logger  # noqa: E402
 
@@ -108,11 +109,16 @@ class AgentOrchestrator:
             else None
         )
         self.phobert = PhoBERTEncoder(override_config=phobert_config)
-        self.vit5 = ViT5Planner(model_name=self.vit5_checkpoint)  
+        self.vit5 = (
+            ViT5Planner(checkpoint_path=self.vit5_checkpoint)
+            if self.vit5_checkpoint
+            else ViT5Planner()
+        )
 
         # Perception
         logger.info("  → Initializing perception...")
         self.dom_distiller = DOMDistiller()
+        self.vision_enhancer = VisionEnhancer() if settings.enable_vision else None
         
         # Planning
         logger.info("  → Initializing planning...")
@@ -343,12 +349,18 @@ class AgentOrchestrator:
         # Take screenshot (optional, for debugging)
         screenshot = await self.browser_manager.screenshot(page)
         
+        vision_context = None
+        if self.vision_enhancer:
+            vision_context = await self.vision_enhancer.analyze_async(screenshot)
+
         observation = {
             'url': url,
             'dom': dom_distilled,
             'elements': elements,
+            'interactive_elements': elements,  # maintain compatibility with planner expectations
             'screenshot': screenshot,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'vision': vision_context.__dict__ if vision_context else None,
         }
         
         logger.debug(f"✓ Observed: {len(dom_distilled)} chars DOM, {len(elements)} elements")
@@ -365,15 +377,6 @@ class AgentOrchestrator:
             await self.browser_manager.close()
         logger.info("AgentOrchestrator closed resources")
     
-    def __del__(self):
-        """Cleanup"""
-        try:
-            if hasattr(self, "browser_manager"):
-                asyncio.create_task(self.browser_manager.close())
-        except:
-            pass
-
-
 # Test & Usage Example
 async def test_orchestrator():
     """Test orchestrator with simple task"""

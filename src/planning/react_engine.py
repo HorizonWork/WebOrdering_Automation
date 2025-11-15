@@ -136,8 +136,10 @@ class ReActEngine:
         # STEP 2: ACT - Generate action
         logger.info("⚡ Generating action...")
         action = self.planner.generate_action(
-            thought=thought,
+            query=query,
             observation=observation,
+            history=recent_history,
+            thought=thought,
             available_skills=available_skills
         )
         logger.info(f"   Action: {action['skill']}({action['params']})")

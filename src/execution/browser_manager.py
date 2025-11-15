@@ -167,14 +167,30 @@ class BrowserManager:
     async def _launch_with_profile(self):
         """Launch Chrome with existing profile"""
         logger.info("🌐 Launching Chrome with profile...")
-        
-        # Get user data directory
-        user_data_dir = self._get_chrome_user_data_dir()
-        
+
+        base_user_data_dir = Path(self._get_chrome_user_data_dir())
+        if self.chrome_profile_directory:
+            profile_path = base_user_data_dir / self.chrome_profile_directory
+            logger.info(f"📁 Using Chrome profile directory: {profile_path}")
+        else:
+            profile_path = base_user_data_dir / "Default"
+            logger.info("📁 No profile specified, defaulting to 'Default'")
+
+        if not profile_path.exists():
+            available_profiles = [
+                p.name for p in base_user_data_dir.iterdir()
+                if p.is_dir() and (p.name.startswith("Profile") or p.name == "Default")
+            ]
+            raise FileNotFoundError(
+                f"Profile directory not found: {profile_path}\n"
+                f"Available profiles in {base_user_data_dir}:\n" +
+                "\n".join([f"  - {p}" for p in available_profiles])
+            )
+
         # Get Chrome executable
         chrome_path = self._get_chrome_executable_path()
-        
-        # Build args
+
+        # Build args (no explicit --profile-directory when pointing directly to the profile path)
         args = [
             "--disable-blink-features=AutomationControlled",
             "--disable-dev-shm-usage",
@@ -183,29 +199,11 @@ class BrowserManager:
             "--no-first-run",
             "--no-default-browser-check",
         ]
-        
-        # Add profile directory if specified
-        if self.chrome_profile_directory:
-            logger.info(f"📁 Using profile: {self.chrome_profile_directory}")
-            args.append(f'--profile-directory={self.chrome_profile_directory}')
-            
-            # Verify profile exists
-            profile_path = Path(user_data_dir) / self.chrome_profile_directory
-            if not profile_path.exists():
-                available_profiles = [
-                    p.name for p in Path(user_data_dir).iterdir() 
-                    if p.is_dir() and (p.name.startswith("Profile") or p.name == "Default")
-                ]
-                raise FileNotFoundError(
-                    f"Profile directory not found: {profile_path}\n"
-                    f"Available profiles in {user_data_dir}:\n" +
-                    "\n".join([f"  - {p}" for p in available_profiles])
-                )
-        
+
         # Launch persistent context
         try:
             self.context = await self.playwright.chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
+                user_data_dir=str(profile_path),
                 headless=self.headless,
                 executable_path=chrome_path,
                 viewport=self.viewport,
@@ -219,7 +217,7 @@ class BrowserManager:
                     "❌ Cannot launch Chrome profile - profile is already in use!\n"
                     "Please close all Chrome windows before running with Chrome profile.\n"
                     f"Profile: {self.chrome_profile_directory}\n"
-                    f"User Data Dir: {user_data_dir}"
+                    f"User Data Dir: {profile_path}"
                 ) from e
             raise
         
@@ -344,15 +342,6 @@ class BrowserManager:
         except Exception as e:
             logger.warning(f"Wait for load timeout: {e}")
     
-    def __del__(self):
-        """Cleanup on deletion"""
-        try:
-            if self.browser or self.context:
-                asyncio.create_task(self.close())
-        except:
-            pass
-
-
 # Test
 async def test_browser_manager():
     """Test browser manager"""
