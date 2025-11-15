@@ -1,0 +1,12 @@
+raw:
+  intents: data/raw/intents
+  sft: data/raw/sft
+  trajectories: data/raw/trajectories
+  vision: data/raw/vision
+processed:
+  intents_train: data/processed/intents_train.jsonl
+  intents_val:   data/processed/intents_val.jsonl
+  intents_test:  data/processed/intents_test.jsonl
+  sft_train:     data/processed/sft_train.jsonl
+  sft_val:       data/processed/sft_val.jsonl
+  sft_test:      data/processed/sft_test.jsonl
