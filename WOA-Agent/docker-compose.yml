@@ -1,7 +1,0 @@
-version: '3.8'
-services:
-  woa-agent:
-    build: .
-    volumes:
-      - ./:/app
-    command: python -m src.orchestrator.agent_orchestrator

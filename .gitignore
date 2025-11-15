@@ -1,0 +1,37 @@
+__pycache__/
+*.pyc
+.env
+.env.local
+.vscode/
+venv/
+data/
+woa/
+checkpoints/
+logs/
+data/embeddings/
+
+# Data files - avoid committing large data files
+data/raw/
+data/processed/
+data/external/
+*.json
+*.jsonl
+*.csv
+*.parquet
+*.pkl
+*.pickle
+*.h5
+*.pt
+*.bin
+
+# Trajectory files specifically mentioned in the project
+data/raw/trajectories/
+data/raw/intents/
+
+# Notebooks outputs and checkpoints
+*.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Large model files
+models/
+model_weights/
