@@ -46,8 +46,8 @@ class DOMDistiller:
     
     def __init__(
         self,
-        max_dom_size: int = 10000,
-        max_elements: int = 100
+        max_dom_size: int = 50000,
+        max_elements: int = 300
     ):
         """
         Initialize DOM distiller.

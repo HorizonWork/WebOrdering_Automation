@@ -69,6 +69,7 @@ class SkillExecutor:
             'hover': self.interaction.hover,
             'press': self.interaction.press,
             'fill': self.interaction.fill,
+            'scroll': self.interaction.scroll,
             
             # Observation
             'screenshot': self.observation.screenshot,

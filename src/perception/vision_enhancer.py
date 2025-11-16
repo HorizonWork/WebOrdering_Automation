@@ -63,7 +63,10 @@ class VisionEnhancer:
             logger.info(f"YOLO loaded from {self.yolo_path}")
             return model
         except Exception as exc:  # pragma: no cover
-            logger.error(f"Failed to load YOLO model: {exc}")
+            logger.error(
+                "Failed to load YOLO model: %s. Ensure ultralytics>=8.2.0 "
+                "matches the checkpoint architecture.", exc
+            )
             return None
 
     def _load_florence(self):
@@ -76,11 +79,19 @@ class VisionEnhancer:
         except Exception as exc:  # pragma: no cover
             logger.warning(f"Transformers/Peft not available ({exc}); Florence disabled")
             return None
+
+        local_only = Path(self.florence_base).exists()
+        load_kwargs = {
+            "trust_remote_code": True,
+            "local_files_only": local_only,
+        }
+
         try:
-            processor = AutoProcessor.from_pretrained(self.florence_base)
+            processor = AutoProcessor.from_pretrained(self.florence_base, **load_kwargs)
             model = AutoModelForCausalLM.from_pretrained(
                 self.florence_base,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                **load_kwargs,
             )
             if self.florence_adapter and Path(self.florence_adapter).exists():
                 try:

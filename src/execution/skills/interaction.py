@@ -4,6 +4,7 @@ Interaction Skills - User interaction operations
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Add project root to path
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -68,3 +69,33 @@ class InteractionSkills(BaseSkill):
             return self._success(f"Pressed key '{key}'")
         except Exception as e:
             return self._error(f"Press failed: {str(e)}")
+
+    async def scroll(
+        self,
+        page,
+        direction: str = "down",
+        amount: Optional[int] = None,
+        **kwargs,
+    ):
+        """Scroll page by roughly one viewport instead of jumping to full bottom/top."""
+        try:
+            direction = (direction or "down").lower()
+            viewport_height = await page.evaluate("() => window.innerHeight") or 900
+            step = int(amount) if amount else int(viewport_height * 0.75)
+            step = max(100, step)
+
+            if direction == "top":
+                await page.evaluate("() => window.scrollTo({top: 0, behavior: 'smooth'})")
+            elif direction == "bottom":
+                await page.evaluate("() => window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'})")
+            else:
+                delta = step if direction == "down" else -step
+                await page.evaluate(
+                    "() => window.scrollBy({top: arguments[0], behavior: 'smooth'})",
+                    delta,
+                )
+
+            await page.wait_for_timeout(350)
+            return self._success(f"Scrolled {direction} by {step}px")
+        except Exception as e:
+            return self._error(f"Scroll failed: {str(e)}")

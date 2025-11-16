@@ -191,6 +191,7 @@ class BrowserManager:
         chrome_path = self._get_chrome_executable_path()
 
         # Build args (no explicit --profile-directory when pointing directly to the profile path)
+        window_arg = f"--window-size={self.viewport['width']},{self.viewport['height']}"
         args = [
             "--disable-blink-features=AutomationControlled",
             "--disable-dev-shm-usage",
@@ -198,6 +199,7 @@ class BrowserManager:
             "--disable-restore-session-state",
             "--no-first-run",
             "--no-default-browser-check",
+            window_arg,
         ]
 
         # Launch persistent context
@@ -247,7 +249,8 @@ class BrowserManager:
             headless=self.headless,
             args=[
                 '--disable-blink-features=AutomationControlled',
-                '--disable-dev-shm-usage'
+                '--disable-dev-shm-usage',
+                f"--window-size={self.viewport['width']},{self.viewport['height']}"
             ]
         )
         
