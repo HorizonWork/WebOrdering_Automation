@@ -1,32 +1,26 @@
+# run_agent.py
 import asyncio
-import sys
-from pathlib import Path
-
-# Add project root to path
-ROOT_DIR = Path(__file__).resolve().parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
 from src.orchestrator.agent_orchestrator import AgentOrchestrator
+from src.models.phobert_encoder import PhoBERTEncoder
+from src.models.vit5_planner import ViT5Planner
 
-
-async def main() -> None:
-    """Run a single agent task for quick manual smoke-testing."""
+async def main():
+    # Initialize components với checkpoints đã train
+    encoder = PhoBERTEncoder()
+    planner = ViT5Planner(checkpoint_path="checkpoints/vit5")  # Use fine-tuned model
+    
     agent = AgentOrchestrator(
-        max_steps=15,
-        headless=False,  # Hi?n th? browser d? debug
+        phobert_encoder=encoder,
+        vit5_planner=planner
     )
-
+    
+    # Execute task
     result = await agent.execute_task(
-        query="Tìm điện thoại iPhone trên Lazada", start_url="https://www.lazada.vn",
+        query="Tìm điện thoại iPhone trên Lazada",
+        headless=False
     )
-
-    print(f"? Success: {result.success}")
-    print(f"?? Steps: {result.steps}")
-    print(f"?? History: {len(result.history)} actions")
-    if result.error:
-        print(f"?? Error: {result.error}")
-
+    
+    print(result)
 
 if __name__ == "__main__":
     asyncio.run(main())
