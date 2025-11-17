@@ -126,7 +126,9 @@ class AgentOrchestrator:
         
         # Execution
         logger.info("  → Initializing execution...")
-        self.browser_manager = BrowserManager(headless=self.headless)
+        browser_config = dict(settings.browser_config)
+        browser_config["headless"] = self.headless
+        self.browser_manager = BrowserManager(**browser_config)
         self.skill_executor = SkillExecutor()
         
         # State & Safety

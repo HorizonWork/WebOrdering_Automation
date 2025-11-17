@@ -90,10 +90,15 @@ class InteractionSkills(BaseSkill):
                 await page.evaluate("() => window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'})")
             else:
                 delta = step if direction == "down" else -step
-                await page.evaluate(
-                    "() => window.scrollBy({top: arguments[0], behavior: 'smooth'})",
-                    delta,
-                )
+                try:
+                    # Mouse wheel produces consistent incremental scroll instead
+                    # of jumping straight to the footer.
+                    await page.mouse.wheel(0, delta)
+                except Exception:
+                    await page.evaluate(
+                        "(offset) => window.scrollBy({top: offset, behavior: 'smooth'})",
+                        delta,
+                    )
 
             await page.wait_for_timeout(350)
             return self._success(f"Scrolled {direction} by {step}px")

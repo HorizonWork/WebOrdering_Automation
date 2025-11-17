@@ -54,7 +54,9 @@ class Settings:
     # Chrome Profile settings
     use_chrome_profile: bool = field(default_factory=lambda: _env_bool("USE_CHROME_PROFILE", False))
     chrome_executable_path: str = field(default_factory=lambda: os.getenv("CHROME_EXECUTABLE_PATH", ""))
-    chrome_profile_directory: str = "Profile 18"
+    chrome_profile_directory: str = field(
+        default_factory=lambda: os.getenv("CHROME_PROFILE_DIRECTORY", "Profile 18")
+    )
 
     @property
     def viewport(self) -> Dict[str, int]:

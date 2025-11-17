@@ -5,6 +5,9 @@ Vision Enhancer - optional multimodal perception (YOLO + Florence captioning).
 from __future__ import annotations
 
 import asyncio
+import shutil
+import sys
+import zipfile
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -69,27 +72,86 @@ class VisionEnhancer:
             )
             return None
 
+    def _ensure_hf_modules_on_path(self, extra: Optional[Path] = None) -> None:
+        candidates = [Path.home() / ".cache" / "huggingface" / "modules"]
+        if extra:
+            candidates.append(extra)
+            candidates.append(extra / "modules")
+        
+        for candidate in candidates:
+            if candidate.exists():
+                candidate_str = str(candidate)
+                if candidate_str not in sys.path:
+                    sys.path.insert(0, candidate_str)
+
+    def _prepare_local_florence_repo(self, archive_path: Path) -> Optional[Path]:
+        if not archive_path.exists():
+            logger.error(f"Florence checkpoint not found: {archive_path}")
+            return None
+        
+        if not zipfile.is_zipfile(archive_path):
+            logger.error(
+                f"Florence checkpoint {archive_path} is not a zip archive. "
+                "Expected a zipped Hugging Face repository."
+            )
+            return None
+        
+        target_dir = archive_path.parent / f"{archive_path.stem}_extracted"
+        marker = target_dir / ".source_timestamp"
+        current_token = str(archive_path.stat().st_mtime_ns)
+        
+        def _extract():
+            if target_dir.exists():
+                shutil.rmtree(target_dir)
+            target_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Extracting Florence checkpoint {archive_path} → {target_dir}")
+            with zipfile.ZipFile(archive_path, "r") as zf:
+                zf.extractall(target_dir)
+            marker.write_text(current_token)
+        
+        if not target_dir.exists() or not marker.exists():
+            _extract()
+        else:
+            if marker.read_text().strip() != current_token:
+                _extract()
+        
+        return target_dir
+
     def _load_florence(self):
         if not self.florence_base:
             logger.info("No Florence base model configured, captioning disabled")
             return None
+        
+        model_source = self.florence_base
+        local_only = Path(model_source).exists()
+        base_path = Path(model_source)
+        
+        if base_path.is_file():
+            repo_dir = self._prepare_local_florence_repo(base_path)
+            if not repo_dir:
+                return None
+            self._ensure_hf_modules_on_path(repo_dir)
+            model_source = str(repo_dir)
+            local_only = True
+        else:
+            self._ensure_hf_modules_on_path()
+        
         try:
             from transformers import AutoProcessor, AutoModelForCausalLM  # type: ignore
             from peft import PeftModel  # type: ignore
         except Exception as exc:  # pragma: no cover
             logger.warning(f"Transformers/Peft not available ({exc}); Florence disabled")
             return None
-
-        local_only = Path(self.florence_base).exists()
+        
         load_kwargs = {
             "trust_remote_code": True,
             "local_files_only": local_only,
         }
 
         try:
-            processor = AutoProcessor.from_pretrained(self.florence_base, **load_kwargs)
+            processor = AutoProcessor.from_pretrained(model_source, **load_kwargs)
             model = AutoModelForCausalLM.from_pretrained(
-                self.florence_base,
+                model_source,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 **load_kwargs,
             )
@@ -107,6 +169,7 @@ class VisionEnhancer:
         except Exception as exc:  # pragma: no cover
             logger.error(f"Failed to load Florence model: {exc}")
             return None
+
 
     async def analyze_async(self, screenshot: Optional[bytes]) -> Optional[VisionResult]:
         if not screenshot:
