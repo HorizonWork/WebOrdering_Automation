@@ -1,3 +1,5 @@
+<!-- markdownlint-disable -->
+
 # WOA Agent - Setup & Requirements Guide
 
 ## Table of Contents
@@ -200,6 +202,7 @@ Edit `.env` with your settings:
 ```bash
 # ====== MODEL CONFIGURATION ======
 PHOBERT_MODEL=vinai/phobert-base-v2
+DEVICE=cuda
 VIT5_MODEL=VietAI/vit5-base
 DEVICE=cuda  # or 'cpu', 'mps' for Mac
 

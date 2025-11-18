@@ -1,3 +1,5 @@
+<!-- markdownlint-disable -->
+
 # WOA Agent - Theoretical Foundations & Architecture
 
 ## Table of Contents

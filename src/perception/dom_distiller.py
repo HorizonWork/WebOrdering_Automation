@@ -6,16 +6,15 @@ FIXED: Added robust None-safety checks for all operations
 
 import sys
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 from bs4 import BeautifulSoup, Comment
-import re
 
 # Add project root to path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.utils.logger import get_logger
+from src.utils.logger import get_logger # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -61,14 +60,12 @@ class DOMDistiller:
         
         # Interactive elements we care about
         self.interactive_tags = {
-            'input', 'button', 'a', 'select', 'textarea',
-            'form', 'label'
+            'input', 'button', 'a', 'select', 'textarea', 'form', 'label'
         }
         
         # Important attributes to keep
         self.important_attrs = {
-            'id', 'class', 'name', 'type', 'placeholder',
-            'href', 'value', 'aria-label', 'role'
+            'id', 'class', 'name', 'type', 'placeholder', 'href', 'value', 'aria-label', 'role'
         }
         
         logger.info(f"DOMDistiller initialized (max_size={max_dom_size}, max_elements={max_elements})")

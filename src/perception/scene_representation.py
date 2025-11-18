@@ -5,7 +5,7 @@ Combines DOM, visual, and semantic information
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import json
 from datetime import datetime
 
@@ -14,9 +14,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.perception.dom_distiller import DOMDistiller
-from src.models.phobert_encoder import PhoBERTEncoder
-from src.utils.logger import get_logger
+from src.perception.dom_distiller import DOMDistiller # noqa: E402
+from src.models.phobert_encoder import PhoBERTEncoder # noqa: E402
+from src.utils.logger import get_logger # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -231,17 +231,17 @@ class SceneRepresentation:
     def summarize_scene(self, scene: Dict) -> str:
         """Generate human-readable scene summary"""
         summary = f"""
-Scene Summary:
-  URL: {scene['url']}
-  Timestamp: {scene['timestamp']}
-  
-  DOM:
-    Raw size: {scene['dom']['raw_size']} chars
-    Distilled size: {scene['dom']['distilled_size']} chars
-    Reduction: {(1 - scene['dom']['distilled_size']/scene['dom']['raw_size'])*100:.1f}%
-  
-  Interactive Elements: {len(scene['elements'])}
-"""
+        Scene Summary:
+        URL: {scene['url']}
+        Timestamp: {scene['timestamp']}
+        
+        DOM:
+            Raw size: {scene['dom']['raw_size']} chars
+            Distilled size: {scene['dom']['distilled_size']} chars
+            Reduction: {(1 - scene['dom']['distilled_size']/scene['dom']['raw_size'])*100:.1f}%
+        
+        Interactive Elements: {len(scene['elements'])}
+        """
         
         # Element breakdown
         if scene['elements']:
@@ -258,7 +258,7 @@ Scene Summary:
         
         return summary.strip()
     
-    def save_scene(self, scene: Dict, path: str):
+    def save_scene(self, scene: Dict, path: Union[str, Path]):
         """Save scene to JSON file"""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -319,7 +319,7 @@ if __name__ == "__main__":
         metadata={'page_type': 'search'}
     )
     
-    print(f"✓ Scene created")
+    print("✓ Scene created")
     print(f"  Elements: {len(scene['elements'])}")
     print(f"  DOM size: {scene['dom']['distilled_size']} chars\n")
     
@@ -334,7 +334,7 @@ if __name__ == "__main__":
     print("-" * 40)
     
     results = scene_rep.find_element_by_text(scene, "search button", top_k=3)
-    print(f"Query: 'search button'\n")
+    print("Query: 'search button'\n")
     for i, result in enumerate(results, 1):
         elem = result['element']
         print(f"{i}. {elem['tag']} - {elem['text']}")

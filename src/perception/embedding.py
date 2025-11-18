@@ -13,8 +13,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.models.phobert_encoder import PhoBERTEncoder
-from src.utils.logger import get_logger
+from src.models.phobert_encoder import PhoBERTEncoder # noqa: E402
+from src.utils.logger import get_logger # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -208,7 +208,7 @@ if __name__ == "__main__":
         attributes={'placeholder': 'Tìm kiếm sản phẩm'}
     )
     
-    print(f"✓ Encoded input element")
+    print("✓ Encoded input element")
     print(f"  Shape: {emb.shape}")
     print(f"  First 10 dims: {emb[0, :10]}\n")
     

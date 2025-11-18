@@ -1,6 +1,6 @@
 phobert:
   model_name: vinai/phobert-base
-  adapter_dir: checkpoints/phobert       # chỉ dùng checkpoints/, KHÔNG cần models/
+  adapter_dir: checkpoints/phobert      
 vit5:
   model_name: VietAI/vit5-base
   ckpt_dir:   checkpoints/vit5

@@ -162,7 +162,7 @@ class VisionEnhancer:
                 except Exception as exc:
                     logger.warning(f"Failed to load Florence adapter: {exc}")
             self._processor = processor
-            model.to(self.device)
+            model.to(self.device) #type: ignore
             model.eval()
             logger.info(f"Florence model ready on {self.device}")
             return model
@@ -219,11 +219,7 @@ class VisionEnhancer:
         try:
             inputs = self._processor(text=prompt, images=image, return_tensors="pt").to(self.device)
             with torch.no_grad():
-                generated_ids = self._florence.generate(
-                    **inputs,
-                    max_new_tokens=128,
-                    do_sample=False,
-                )
+                generated_ids = self._florence.generate(**inputs, max_new_tokens=128, do_sample=False) #type: ignore
             caption = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
             return caption.strip()
         except Exception as exc:

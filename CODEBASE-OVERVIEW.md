@@ -1,3 +1,5 @@
+<!-- markdownlint-disable -->
+
 # 📚 WOA Agent - Tổng Quan Codebase
 
 ## 🎯 Giới thiệu Dự án

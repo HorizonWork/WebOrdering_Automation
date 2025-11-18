@@ -7,14 +7,13 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
-import re
 
 # Add project root to path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.utils.logger import get_logger
+from src.utils.logger import get_logger # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -130,7 +129,7 @@ class UIDetector:
     
     def detect_login_form(self, soup: BeautifulSoup) -> Optional[Dict]:
         """Detect login form"""
-        pattern = self.patterns['login_form']
+        # pattern = self.patterns['login_form']
         
         # Must have password field
         password_input = soup.select('input[type="password"]')
