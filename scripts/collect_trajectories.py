@@ -2,39 +2,14 @@
 """
 Collect web interaction trajectories for training / analysis.
 
-Mục tiêu:
-    - Chạy agent (ReAct hiện tại) trên Shopee/Lazada hoặc site bất kỳ.
-    - Ghi lại toàn bộ episode (steps, thought, action, observation, result).
-    - Chuẩn hoá thành JSON để sau này:
-        * Tái tạo episode.
-        * Tách sample cho Planner / Controller / SFT.
-    - (Tuỳ chọn) gọi teacher LLM (vd: Gemini Flash) để gán nhãn thêm cho mỗi step.
+- Gọi AgentOrchestrator để chạy 1 task (query + start_url)
+- Lấy history từ ReactEngine
+- Chuyển history thành EpisodeRecord (list StepRecord)
+- Lưu ra JSON trong thư mục data/trajectories/.../episodes/
 
-Ví dụ (thu thập 1 episode):
-
-    python scripts/collect_trajectories.py ^
-        --query "Tìm iPhone 15 trên Shopee" ^
-        --url "https://shopee.vn" ^
-        --out_dir data/trajectories ^
-        --max_steps 10 ^
-        --headless
-
-Thu thập nhiều episode từ file tasks.jsonl:
-    - Mỗi dòng: {"query": "...", "url": "..."}
-
-    python scripts/collect_trajectories.py ^
-        --tasks data/tasks_shopping.jsonl ^
-        --out_dir data/trajectories/shopping ^
-        --episodes 20
-
-Gắn teacher Gemini (tùy chọn, cần: pip install google-generativeai, GEMINI_API_KEY):
-
-    python scripts/collect_trajectories.py ^
-        --query "Tìm iPhone 15 trên Shopee" ^
-        --url "https://shopee.vn" ^
-        --with_teacher ^
-        --teacher_backend gemini ^
-        --teacher_model gemini-2.0-flash
+Lưu ý:
+    - Teacher (Gemini) là OPTIONAL, KHÔNG nên bật khi bạn không muốn dùng API.
+    - UIDetector được dùng để suy ra page_type, search_box,... từ DOM.
 """
 
 from __future__ import annotations
@@ -45,12 +20,17 @@ import json
 import os
 import sys
 import uuid
+import traceback
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Resolve project root (walk up until pyproject.toml)
+# ---------------------------------------------------------------------------
+# Resolve project root
+# ---------------------------------------------------------------------------
+
 ROOT_DIR = Path(__file__).resolve().parent
 for parent in ROOT_DIR.parents:
     if (parent / "pyproject.toml").exists():
@@ -63,7 +43,6 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from src.orchestrator.agent_orchestrator import AgentOrchestrator, ExecutionResult  # noqa: E402
-from src.planning.react_engine import ReActEngine  # noqa: E402
 from src.perception.ui_detector import UIDetector  # noqa: E402
 from src.utils.logger import get_logger, setup_logging  # noqa: E402
 
@@ -101,60 +80,57 @@ class EpisodeRecord:
     metadata: Dict[str, Any]
 
 
+def episode_to_json_dict(ep: EpisodeRecord) -> Dict[str, Any]:
+    """Convert EpisodeRecord (dataclass) thành dict để dump JSON."""
+    return asdict(ep)
+
+
 # ---------------------------------------------------------------------------
-# Teacher LLM (optional, e.g. Gemini)
+# Teacher LLM (OPTIONAL – bạn có thể bỏ qua hoàn toàn phần này)
 # ---------------------------------------------------------------------------
 
 
 class TeacherBase:
-    """Base class for teacher LLMs (optional)."""
-
     def annotate_step(
         self,
         goal: str,
         page_state: Dict[str, Any],
         short_history: List[Dict[str, Any]],
     ) -> Optional[Dict[str, Any]]:
-        """
-        Return optional labels for this step, e.g.:
-
-            {
-              "planner": {"next_plan_step": {...}},
-              "controller": {"chosen_action": {...}},
-              "raw_response": "<original LLM text>"
-            }
-        """
         raise NotImplementedError
 
 
 class GeminiTeacher(TeacherBase):
     """
-    Simple wrapper around Gemini API for bootstrapping labels.
+    Wrapper cho Gemini API với JSON mode.
 
-    Yêu cầu:
-        pip install google-generativeai
-        export GEMINI_API_KEY=...
+    KHÔNG dùng nếu bạn không muốn gọi API:
+    - Đừng truyền --with_teacher
     """
 
     def __init__(
         self,
-        model_name: str = "gemini-2.0-flash",
+        model_name: str = "gemini-1.5-flash",
         api_key: Optional[str] = None,
     ) -> None:
         try:
-            import google.generativeai as genai  # type: ignore
-        except ImportError as exc:  # pragma: no cover - optional dependency
-            raise RuntimeError(
-                "google-generativeai chưa được cài. "
-                "Cài bằng: pip install google-generativeai"
-            ) from exc
+            import google.generativeai as genai
+        except ImportError as exc:
+            raise RuntimeError("Thiếu thư viện: pip install google-generativeai") from exc
 
         api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise RuntimeError("Thiếu GEMINI_API_KEY trong environment.")
+            logger.warning("⚠️ Thiếu GEMINI_API_KEY, Teacher sẽ không hoạt động.")
+            self._model = None
+            return
 
         genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(model_name)
+
+        # Cấu hình model trả về JSON
+        self._model = genai.GenerativeModel(
+            model_name,
+            generation_config={"response_mime_type": "application/json"},
+        )
 
     def annotate_step(
         self,
@@ -162,75 +138,44 @@ class GeminiTeacher(TeacherBase):
         page_state: Dict[str, Any],
         short_history: List[Dict[str, Any]],
     ) -> Optional[Dict[str, Any]]:
-        """
-        Build a compact JSON-only prompt and let Gemini propose:
-          - planner.next_plan_step
-          - controller.chosen_action
-        """
-        prompt_text = (
-            "Bạn là teacher cho web-shopping agent.\n"
-            "Dựa trên goal và page_state hiện tại, hãy đề xuất:\n"
-            "  (1) Bước kế hoạch cấp cao tiếp theo (Planner) với schema:\n"
-            '      {"next_plan_step": {"step_id": <one_of>, "type": "...", "description": "..."} }\n'
-            "      Các step_id hợp lệ: SEARCH_PRODUCT, APPLY_FILTER, SELECT_PRODUCT,\n"
-            "      GO_TO_CART, GO_TO_CHECKOUT, FILL_CHECKOUT_INFO, REVIEW_ORDER, TERMINATE.\n"
-            "  (2) Một action cụ thể gần nhất để tiến tới bước đó, với schema:\n"
-            '      {"chosen_action": {"action_id": "...", "type": "...", "text": "...?"}}\n'
-            "      Ở đây action_id có thể dựa trên element description trong page_state.\n"
-            "Chỉ trả JSON:\n"
-            '{\"planner\": {...}, \"controller\": {...}}\n\n'
-            f"Goal: {goal}\n"
-            f"Page state (rút gọn): {json.dumps(page_state, ensure_ascii=False)[:2000]}\n"
-            f"Short history (thought+action): {json.dumps(short_history, ensure_ascii=False)[:1500]}\n"
-        )
-
-        prompt = {
-            "role": "user",
-            "parts": [prompt_text],
-        }
-
-        try:  # pragma: no cover - network call
-            resp = self._model.generate_content([prompt])
-            raw = resp.text or ""
-        except Exception as exc:
-            logger.warning(f"GeminiTeacher lỗi: {exc}")
+        if not self._model:
             return None
 
-        raw = raw.strip()
+        prompt_text = (
+            "You are an expert Web Automation Teacher.\n"
+            "Analyze the current state and goal to provide the Optimal Next Action.\n\n"
+            f"User Goal: {goal}\n"
+            f"Current URL: {page_state.get('url', 'unknown')}\n"
+            f"Page Elements Summary: {json.dumps(page_state.get('dom_state', {}), ensure_ascii=False)}\n"
+            f"Recent History: {json.dumps(short_history, ensure_ascii=False)}\n\n"
+            "Return JSON with this schema:\n"
+            "{\n"
+            "  \"planner\": {\n"
+            "    \"next_plan_step\": {\"step_id\": \"...\", \"type\": \"...\", \"description\": \"...\"}\n"
+            "  },\n"
+            "  \"controller\": {\n"
+            "    \"chosen_action\": {\"action_id\": \"...\", \"type\": \"...\", \"parameters\": {...}, \"reason\": \"...\"}\n"
+            "  }\n"
+            "}"
+        )
 
-        # Try parse whole response as JSON
         try:
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                data["raw_response"] = raw
-                return data
-        except json.JSONDecodeError:
-            pass
-
-        # Fallback: try to extract JSON object substring
-        try:
-            start = raw.find("{")
-            end = raw.rfind("}")
-            if start != -1 and end != -1 and end > start:
-                snippet = raw[start : end + 1]
-                data = json.loads(snippet)
-                if isinstance(data, dict):
-                    data["raw_response"] = raw
-                    return data
-        except Exception:
-            pass
-
-        logger.debug("GeminiTeacher: không parse được JSON, bỏ qua label step này.")
-        return None
+            # Rate limiting để tránh 429 (nếu có dùng)
+            time.sleep(4)
+            resp = self._model.generate_content(prompt_text)
+            raw = resp.text or ""
+            return json.loads(raw)
+        except Exception as exc:
+            logger.warning(f"GeminiTeacher Error: {exc}")
+            return None
 
 
 def build_teacher(backend: str, model_name: str) -> Optional[TeacherBase]:
     backend = backend.lower()
-    if backend == "none":
-        return None
     if backend == "gemini":
         return GeminiTeacher(model_name=model_name)
-    raise ValueError(f"Teacher backend không hỗ trợ: {backend}")
+    logger.warning(f"Unknown teacher backend: {backend}")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -245,163 +190,131 @@ def ensure_dir(path: Path) -> Path:
 
 def load_tasks(tasks_path: Optional[str]) -> List[Tuple[str, str]]:
     """
-    Load danh sách (query, url).
-    Hỗ trợ JSON, JSONL (NDJSON).
+    Đọc file tasks.jsonl (mỗi dòng: {"query": "...", "url": "..."})
+    Trả về list (query, url).
     """
     if not tasks_path:
         return []
-
     p = Path(tasks_path)
     if not p.exists():
-        raise FileNotFoundError(f"Tasks file không tồn tại: {p}")
-
-    text = p.read_text(encoding="utf-8").strip()
-    if not text:
-        return []
-
-    rows: List[Dict[str, Any]] = []
-    # Try JSON (array or single object)
-    try:
-        data = json.loads(text)
-        if isinstance(data, list):
-            rows = [x for x in data if isinstance(x, dict)]
-        elif isinstance(data, dict):
-            rows = [data]
-    except json.JSONDecodeError:
-        # Fallback: NDJSON
-        rows = []
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-                if isinstance(obj, dict):
-                    rows.append(obj)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(f"Lỗi JSON trong {p}: {exc}") from exc
+        raise FileNotFoundError(f"File tasks không tồn tại: {p}")
 
     pairs: List[Tuple[str, str]] = []
-    for r in rows:
-        q = r.get("query") or r.get("goal") or r.get("task")
-        u = r.get("url") or r.get("start_url")
-        if isinstance(q, str) and isinstance(u, str):
-            pairs.append((q, u))
+    text = p.read_text(encoding="utf-8").strip()
+
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+            if "query" in row and "url" in row:
+                pairs.append((row["query"], row["url"]))
+        except Exception:
+            logger.warning(f"Không parse được dòng task: {line!r}")
     return pairs
 
 
 def build_page_state(observation: Dict[str, Any], ui_detector: UIDetector) -> Dict[str, Any]:
     """
-    Chuẩn hoá observation từ AgentOrchestrator thành page_state đơn giản.
+    Tạo snapshot trạng thái trang gọn nhẹ từ observation của orchestrator.
+
+    observation dự kiến chứa:
+        - url: str
+        - dom: str (HTML)
+        - interactive_elements: list[...] (từ DOMDistiller)
+        - vision_state: dict (từ OmniParser / VisionEnhancer – nếu có)
     """
     url = observation.get("url", "")
     dom_html = observation.get("dom", "") or ""
-    elements = observation.get("elements") or observation.get("interactive_elements") or []
+    elements = observation.get("interactive_elements") or []
+    vision_state = observation.get("vision_state") or {}
 
-    try:
-        ui_info = ui_detector.detect_all(dom_html) if dom_html else {
-            "search_box": {"found": False},
-            "login_form": {"found": False},
-            "product_listing": {"found": False},
-            "navigation": {"found": False},
-            "page_type": "unknown",
-        }
-    except Exception as exc:
-        logger.warning(f"UIDetector lỗi: {exc}")
-        ui_info = {
-            "search_box": {"found": False},
-            "login_form": {"found": False},
-            "product_listing": {"found": False},
-            "navigation": {"found": False},
-            "page_type": "unknown",
-        }
+    # Detect UI (page_type, search_box, product_listing, ...)
+    ui_info: Dict[str, Any] = {"page_type": "generic"}
+    if dom_html:
+        try:
+            # UIDetector.detect_all chỉ nhận 1 tham số: html
+            ui_info = ui_detector.detect_all(dom_html) or {"page_type": "generic"}
+        except Exception as e:
+            logger.warning(f"UIDetector failed: {e}")
+            ui_info = {"page_type": "generic"}
 
-    page_state: Dict[str, Any] = {
+    return {
         "url": url,
-        "page_type": ui_info.get("page_type", "unknown"),
+        "page_type": ui_info.get("page_type", "generic"),
         "dom_state": {
-            "distilled_length": len(dom_html),
-            "has_search_box": bool(ui_info.get("search_box", {}).get("found")),
-            "has_login_form": bool(ui_info.get("login_form", {}).get("found")),
-            "has_product_listing": bool(ui_info.get("product_listing", {}).get("found")),
+            "element_count": len(elements),
+            "has_search": bool(ui_info.get("search_box", {}).get("found")),
         },
-        "elements": elements,
+        "elements": elements,          # bạn có thể cắt bớt nếu quá dài
         "ui_detection": ui_info,
-        # vision_state có thể bổ sung sau nếu cần (từ VisionEnhancer)
+        "vision_state": vision_state,
     }
-
-    return page_state
 
 
 def history_to_step_records(
     history: List[Dict[str, Any]],
     goal: str,
     ui_detector: UIDetector,
-    teacher: Optional[TeacherBase] = None,
+    teacher: Optional[TeacherBase],
 ) -> List[StepRecord]:
     """
-    Convert history từ ReActEngine (list[dict]) thành list StepRecord có page_state & (optional) teacher labels.
+    Convert history (ReactEngine) -> list StepRecord.
+
+    history[i] dự kiến có:
+      - timestamp
+      - thought
+      - action
+      - result
+      - observation
     """
-    steps: List[StepRecord] = []
+    records: List[StepRecord] = []
+    total_steps = len(history)
 
-    for idx, s in enumerate(history, 1):
-        observation = s.get("observation", {}) or {}
-        page_state = build_page_state(observation, ui_detector)
+    logger.info(f"📝 Converting {total_steps} steps to StepRecord...")
 
-        teacher_labels: Optional[Dict[str, Any]] = None
-        if teacher is not None:
-            short_history: List[Dict[str, Any]] = []
-            for h in history[max(0, idx - 3) : idx]:
-                short_history.append(
-                    {
-                        "step": h.get("step"),
-                        "thought": h.get("thought"),
-                        "action": h.get("action"),
-                        "result": h.get("result"),
-                    }
-                )
-            teacher_labels = teacher.annotate_step(goal=goal, page_state=page_state, short_history=short_history)
+    for idx, h in enumerate(history):
+        obs = h.get("observation", {}) or {}
+        page_state = build_page_state(obs, ui_detector)
 
-        steps.append(
+        labels = None
+        if teacher:
+            # Teacher là optional – chỉ dùng nếu bạn bật --with_teacher
+            if (idx + 1) % 2 == 0:
+                logger.info(f"   Teacher labeling step {idx+1}/{total_steps}...")
+
+            short_hist = [
+                {"action": s.get("action"), "result": s.get("result")}
+                for s in history[max(0, idx - 3) : idx]
+            ]
+            labels = teacher.annotate_step(goal, page_state, short_hist)
+
+        records.append(
             StepRecord(
-                step=s.get("step", idx),
-                timestamp=s.get("timestamp", datetime.now().isoformat()),
-                thought=s.get("thought", ""),
-                action=s.get("action", {}),
-                result=s.get("result", {}),
+                step=idx + 1,
+                timestamp=h.get("timestamp", ""),
+                thought=h.get("thought", ""),
+                action=h.get("action", {}),
+                result=h.get("result", {}),
                 page_state=page_state,
-                teacher_labels=teacher_labels,
+                teacher_labels=labels,
             )
         )
+    return records
 
-    return steps
 
-
-def execution_result_to_status(result: ExecutionResult, react_engine: ReActEngine) -> str:
-    """Map ExecutionResult + history sang final_status string."""
+def execution_result_to_status(result: ExecutionResult, history_len: int, max_steps: int) -> str:
     if not result.success and result.error:
-        return "FAIL"
-
-    progress = react_engine.analyze_progress()
-    if progress.get("completion_status") == "complete":
+        return "ERROR"
+    if result.success:
         return "SUCCESS"
-
-    # Nếu max_steps đạt mà chưa complete
-    if len(react_engine.history) >= react_engine.max_steps:
+    if history_len >= max_steps:
         return "TIMEOUT"
-
-    # Mặc định: chưa rõ, tạm coi là FAIL nếu success False
-    return "FAIL" if not result.success else "SUCCESS"
-
-
-def episode_to_json_dict(ep: EpisodeRecord) -> Dict[str, Any]:
-    """Convert EpisodeRecord (dataclasses) thành dict JSON-friendly."""
-    data = asdict(ep)
-    return data
+    return "FAIL"
 
 
 # ---------------------------------------------------------------------------
-# Main collection logic
+# Main Logic
 # ---------------------------------------------------------------------------
 
 
@@ -410,183 +323,157 @@ async def collect_one_episode(
     start_url: str,
     max_steps: int,
     headless: bool,
+    user_data_dir: Optional[str],
     out_dir: Path,
     teacher: Optional[TeacherBase] = None,
-) -> Path:
-    """
-    Chạy 1 episode với AgentOrchestrator hiện tại và lưu JSON vào out_dir/episodes.
-    """
-    logger.info("=" * 70)
-    logger.info("Collecting one episode")
-    logger.info(f"Query: {query}")
-    logger.info(f"URL  : {start_url}")
-    logger.info("=" * 70)
+    policy: str = "react",
+) -> Optional[Path]:
+    logger.info(f"\n🔹 START EPISODE: {query}")
+    logger.info(f"   URL: {start_url}")
 
     orchestrator = AgentOrchestrator(
         max_steps=max_steps,
         headless=headless,
-        enable_learning=False,  # tránh side-effect trong collection
-        enable_guardrails=True,
+        enable_learning=False,
+        enable_guardrails=False,
+        user_data_dir=user_data_dir,
     )
+
+    episode_id = f"ep_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    result_data: Optional[ExecutionResult] = None
+    error_msg: Optional[str] = None
 
     try:
-        result: ExecutionResult = await orchestrator.execute_task(
+        result_data = await orchestrator.execute_task(
             query=query,
             start_url=start_url,
+            policy=policy,
         )
-
-        history = orchestrator.react_engine.get_history()
-        ui_detector = UIDetector()
-        step_records = history_to_step_records(
-            history=history,
-            goal=query,
-            ui_detector=ui_detector,
-            teacher=teacher,
-        )
-
-        episode_id = f"ep_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-        final_status = execution_result_to_status(result, orchestrator.react_engine)
-
-        ep = EpisodeRecord(
-            episode_id=episode_id,
-            goal=query,
-            start_url=start_url,
-            created_at=datetime.now().isoformat(),
-            steps=step_records,
-            final_status=final_status,
-            final_url=result.final_url,
-            success=result.success,
-            error=result.error,
-            summary=result.summary,
-            metadata=result.metadata or {},
-        )
-
-        episodes_dir = ensure_dir(out_dir / "episodes")
-        out_path = episodes_dir / f"{episode_id}.json"
-        out_path.write_text(
-            json.dumps(episode_to_json_dict(ep), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-
-        logger.info(f"Episode saved: {out_path}")
-        return out_path
-
+    except Exception as e:
+        logger.error(f"❌ CRITICAL ERROR during execution: {e}")
+        error_msg = str(e)
     finally:
-        await orchestrator.close()
+        logger.info("💾 Saving trajectory data...")
+
+        try:
+            history = orchestrator.react_engine.get_history()
+        except Exception:
+            history = []
+
+        if not history and not error_msg:
+            logger.warning("⚠️ Empty history and no error. Nothing to save.")
+            await orchestrator.close()
+            return None
+
+        try:
+            ui_detector = UIDetector()
+            steps = history_to_step_records(history, query, ui_detector, teacher)
+
+            final_status = "CRASHED"
+            if result_data:
+                final_status = execution_result_to_status(result_data, len(history), max_steps)
+            elif error_msg:
+                final_status = "ERROR"
+
+            ep = EpisodeRecord(
+                episode_id=episode_id,
+                goal=query,
+                start_url=start_url,
+                created_at=datetime.now().isoformat(),
+                steps=steps,
+                final_status=final_status,
+                final_url=getattr(result_data, "final_url", None) or "unknown",
+                success=getattr(result_data, "success", False),
+                error=getattr(result_data, "error", None) or error_msg,
+                summary=getattr(result_data, "summary", None) or "Interrupted",
+                metadata=getattr(result_data, "metadata", None) or {},
+            )
+
+            save_dir = ensure_dir(out_dir / "episodes")
+            save_path = save_dir / f"{episode_id}.json"
+
+            json_content = json.dumps(episode_to_json_dict(ep), ensure_ascii=False, indent=2)
+            save_path.write_text(json_content, encoding="utf-8")
+
+            logger.info(f"✅ Episode saved: {save_path} (Status: {final_status})")
+
+            await orchestrator.close()
+            return save_path
+
+        except Exception as save_err:
+            logger.error(f"🔥 Failed to save episode file: {save_err}")
+            traceback.print_exc()
+            await orchestrator.close()
+            return None
 
 
-async def async_main(args: argparse.Namespace) -> None:
+async def async_main(args: argparse.Namespace):
     setup_logging(level=args.log_level, log_file=None)
-
     out_dir = ensure_dir(Path(args.out_dir))
 
+    # Setup Teacher (optional)
     teacher: Optional[TeacherBase] = None
     if args.with_teacher:
+        logger.info(f"🎓 Initializing Teacher ({args.teacher_backend})...")
         teacher = build_teacher(args.teacher_backend, args.teacher_model)
-        logger.info(f"Teacher backend: {args.teacher_backend}, model={args.teacher_model}")
 
-    tasks: List[Tuple[str, str]] = []
-    if args.tasks:
-        tasks = load_tasks(args.tasks)
-
-    if not tasks:
-        # Single query/url từ CLI
-        if not args.query or not args.url:
-            raise SystemExit("Cần --query và --url (hoặc cung cấp --tasks).")
+    tasks = load_tasks(args.tasks)
+    if not tasks and args.query and args.url:
         tasks = [(args.query, args.url)]
 
-    # Giới hạn số episode
-    if args.episodes is not None and args.episodes > 0:
+    if args.episodes:
         tasks = tasks[: args.episodes]
 
-    logger.info(f"Collecting {len(tasks)} episode(s)")
+    logger.info(f"🚀 Starting collection for {len(tasks)} tasks.")
 
     for i, (q, u) in enumerate(tasks, 1):
-        logger.info(f"\n--- Episode {i}/{len(tasks)} ---")
-        try:
-            await collect_one_episode(
-                query=q,
-                start_url=u,
-                max_steps=args.max_steps,
-                headless=args.headless,
-                out_dir=out_dir,
-                teacher=teacher,
-            )
-        except Exception as exc:
-            logger.error(f"Episode {i} failed: {exc}", exc_info=True)
+        logger.info(f"--- Task {i}/{len(tasks)} ---")
+        await collect_one_episode(
+            query=q,
+            start_url=u,
+            max_steps=args.max_steps,
+            headless=args.headless,
+            user_data_dir=args.user_data_dir,
+            out_dir=out_dir,
+            teacher=teacher,
+            policy=args.policy,
+        )
 
 
-def build_arg_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(
-        description="Collect web interaction trajectories (episodes) for training.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+def main():
+    parser = argparse.ArgumentParser(description="WOA Data Collector")
+
+    parser.add_argument("--query", help="Task query")
+    parser.add_argument("--url", help="Start URL")
+    parser.add_argument("--tasks", help="Path to tasks.jsonl")
+    parser.add_argument("--episodes", type=int, help="Max episodes to run")
+    parser.add_argument("--user_data_dir", help="Path to Chrome User Data (Profile)")
+    parser.add_argument("--headless", action="store_true", help="Run headless")
+    parser.add_argument("--out_dir", default="data/trajectories/shopping/test_debug", help="Output folder")
+    parser.add_argument("--max_steps", type=int, default=15)
+    parser.add_argument("--log_level", default="INFO")
+
+    # Teacher options (optional, có thể bỏ qua nếu không muốn dùng API)
+    parser.add_argument("--with_teacher", action="store_true", help="Enable teacher model for auto labels")
+    parser.add_argument("--teacher_backend", default="gemini")
+    parser.add_argument("--teacher_model", default="gemini-2.0-flash")
+
+    # Execution policy: ReAct LLM vs rule-based vs human teleop
+    parser.add_argument(
+        "--policy",
+        default="react",
+        choices=["react", "rules_shopee", "rules_lazada", "human_teleop"],
+        help="Execution policy for collecting trajectories",
     )
 
-    # Single-task mode
-    ap.add_argument("--query", help="Goal / natural language query (Vietnamese).")
-    ap.add_argument("--url", help="Starting URL.")
+    args = parser.parse_args()
 
-    # Multi-task mode from file
-    ap.add_argument(
-        "--tasks",
-        help="Path to JSON/JSONL file, mỗi dòng/entry có {\"query\": ..., \"url\": ...}.",
-    )
-    ap.add_argument(
-        "--episodes",
-        type=int,
-        default=None,
-        help="Số episode tối đa cần thu thập (cắt bớt từ tasks).",
-    )
+    if not (args.tasks or (args.query and args.url)):
+        print("Error: Provide --tasks OR --query and --url")
+        return
 
-    ap.add_argument(
-        "--out_dir",
-        default=str(ROOT_DIR / "data" / "trajectories"),
-        help="Thư mục lưu output episodes/*.json.",
-    )
-    ap.add_argument(
-        "--max_steps",
-        type=int,
-        default=20,
-        help="Giới hạn số bước agent.",
-    )
-    ap.add_argument(
-        "--headless",
-        action="store_true",
-        help="Chạy browser headless (không hiện UI).",
-    )
-    ap.add_argument(
-        "--log_level",
-        default="INFO",
-        help="Mức log (DEBUG/INFO/WARNING/ERROR).",
-    )
-
-    # Teacher options
-    ap.add_argument(
-        "--with_teacher",
-        action="store_true",
-        help="Bật teacher LLM để gán nhãn step (vd Gemini).",
-    )
-    ap.add_argument(
-        "--teacher_backend",
-        default="gemini",
-        choices=["gemini", "none"],
-        help="Backend teacher.",
-    )
-    ap.add_argument(
-        "--teacher_model",
-        default="gemini-2.0-flash",
-        help="Tên model teacher (vd: gemini-2.0-flash).",
-    )
-
-    return ap
-
-
-def main() -> None:
-    ap = build_arg_parser()
-    args = ap.parse_args()
     asyncio.run(async_main(args))
 
 
 if __name__ == "__main__":
     main()
-

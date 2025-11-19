@@ -1,6 +1,6 @@
 import asyncio
-import sys
-from pathlib import Path
+
+import pytest
 
 import path_setup  # noqa: F401
 
@@ -10,6 +10,7 @@ from src.execution.browser_manager import BrowserManager  # noqa: E402
 from src.perception.dom_distiller import DOMDistiller  # noqa: E402
 
 
+@pytest.mark.asyncio
 async def test_perception_layer():
     print("Testing Perception Layer...")
     manager = BrowserManager(headless=True)  # Không cần hiển thị

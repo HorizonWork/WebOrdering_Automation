@@ -1,7 +1,12 @@
 import asyncio
+
+import pytest
+
 from src.execution.browser_manager import BrowserManager
 from src.execution.skill_executor import SkillExecutor
 
+
+@pytest.mark.asyncio
 async def test_execution_layer():
     print("Testing Execution Layer...")
     manager = BrowserManager(headless=False)
