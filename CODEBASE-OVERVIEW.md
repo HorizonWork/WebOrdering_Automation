@@ -136,12 +136,29 @@ WOA-Agent/
 │   └── data_catalog.yaml          # Data paths
 │
 ├── 📂 scripts/                     # Utility scripts
-│   ├── download_models.py         # Download models
-│   ├── prepare_data.py            # Data preparation
-│   ├── train_vit5.py              # ViT5 training
-│   ├── train_phobert.py           # PhoBERT training
-│   ├── collect_trajectories.py    # Collect training data
-│   └── evaluate_agent.py          # Performance evaluation
+│   ├── data_collection/
+│   │   ├── collect_raw_trajectories.py  # Browser automation collector
+│   │   ├── validate_raw.py              # Episode sanity checks
+│   │   └── tasks/                       # YAML task banks
+│   ├── annotation/
+│   │   ├── gemini_annotator.py          # Gemini labeling
+│   │   └── batch_annotate.py            # Batch pipeline
+│   ├── preprocessing/
+│   │   ├── build_planner_dataset.py     # Planner extraction
+│   │   ├── build_controller_dataset.py  # Controller extraction
+│   │   └── split_dataset.py             # Train/val/test split
+│   ├── training/
+│   │   ├── train_planner.py             # ViT5 + LoRA fine-tuning
+│   │   └── train_controller.py          # Controller training
+│   └── evaluation/
+│       ├── run_benchmark.py             # Agent evaluation
+│       └── error_analysis.py            # Failure diagnostics
+│
+├── evaluation/
+│   ├── metrics.py                         # Metric helpers
+│   ├── benchmarks/                        # Shopee/Lazada tasks
+│   ├── baselines/                         # Gemini/GPT-4/rule baselines
+│   └── results/                           # Run artifacts
 │
 ├── 📂 tests/                       # Test suite
 │   ├── unit/                      # Unit tests
@@ -554,14 +571,14 @@ if __name__ == "__main__":
 
 ### 2. Train Models
 ```bash
-# scripts/train_vit5.py
-python scripts/train_vit5.py --epochs 10 --batch-size 16
+# scripts/training/train_controller.py
+python scripts/training/train_controller.py --epochs 10 --batch-size 16
 ```
 
 ### 3. Evaluate
 ```bash
-# scripts/evaluate_agent.py
-python scripts/evaluate_agent.py --benchmark shopee
+# scripts/evaluation/run_benchmark.py
+python scripts/evaluation/run_benchmark.py --benchmark shopee
 ```
 
 ---
@@ -581,10 +598,20 @@ agent = AgentOrchestrator(headless=False)
 
 ### 3. Inspect trajectories
 ```python
+import json
+from pathlib import Path
 from src.learning.memory.trajectory_buffer import TrajectoryBuffer
+
 buffer = TrajectoryBuffer()
-buffer.load("data/trajectories/latest.json")
-print(buffer.trajectories)
+for ep_path in Path("data/trajectories/successful").glob("*.json"):
+    data = json.loads(ep_path.read_text(encoding="utf-8"))
+    buffer.add_trajectory(
+        query=data.get("goal", ""),
+        steps=data.get("steps", []),
+        success=True,
+        metadata=data.get("metadata"),
+    )
+print(buffer.get_statistics())
 ```
 
 ### 4. Check vector store

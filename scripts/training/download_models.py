@@ -91,7 +91,7 @@ def main():
         print("\n🎉 All models downloaded successfully!")
         print("\nNext steps:")
         print("  1. Run tests: python -m pytest tests/unit/")
-        print("  2. Train models (optional): python scripts/train_vit5.py")
+        print("  2. Train models (optional): python scripts/training/train_controller.py")
         print("  3. Run agent: python run_agent.py")
     else:
         print("\n⚠️  Some models failed to download. Please check errors above.")

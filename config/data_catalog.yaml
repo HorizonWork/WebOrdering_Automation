@@ -1,12 +1,43 @@
 raw:
-  intents: data/raw/intents
-  sft: data/raw/sft
-  trajectories: data/raw/trajectories
-  vision: data/raw/vision
+  shopee:
+    episodes:      data/raw/shopee/episodes
+    screenshots:   data/raw/shopee/screenshots
+    dom_snapshots: data/raw/shopee/dom_snapshots
+  lazada:
+    episodes:      data/raw/lazada/episodes
+    screenshots:   data/raw/lazada/screenshots
+    dom_snapshots: data/raw/lazada/dom_snapshots
+
+annotated:
+  shopee:          data/annotated/shopee/episodes
+  lazada:          data/annotated/lazada/episodes
+
 processed:
-  intents_train: data/processed/intents_train.jsonl
-  intents_val:   data/processed/intents_val.jsonl
-  intents_test:  data/processed/intents_test.jsonl
-  sft_train:     data/processed/sft_train.jsonl
-  sft_val:       data/processed/sft_val.jsonl
-  sft_test:      data/processed/sft_test.jsonl
+  planner:
+    train:         data/processed/planner/train.jsonl
+    val:           data/processed/planner/val.jsonl
+    test:          data/processed/planner/test.jsonl
+  controller:
+    train:         data/processed/controller/train.jsonl
+    val:           data/processed/controller/val.jsonl
+    test:          data/processed/controller/test.jsonl
+
+embeddings:
+  state:           data/embeddings/state_embeddings.faiss
+  action:          data/embeddings/action_embeddings.faiss
+  metadata:        data/embeddings/metadata.json
+
+trajectories:
+  successful:      data/trajectories/successful
+  failed:          data/trajectories/failed
+
+statistics:
+  dataset:               data/statistics/dataset_stats.json
+  action_distribution:   data/statistics/action_distribution.json
+  page_type_distribution: data/statistics/page_type_distribution.json
+  task_complexity:       data/statistics/task_complexity.json
+
+annotation_quality:
+  manual_review_samples: data/annotation_quality/manual_review_samples.json
+  agreement_metrics:     data/annotation_quality/agreement_metrics.json
+  gemini_stats:          data/annotation_quality/gemini_stats.json

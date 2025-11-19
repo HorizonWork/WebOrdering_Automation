@@ -528,7 +528,7 @@ class AgentOrchestrator:
         """
         Build a lightweight page_state snapshot for rule-based policies.
 
-        Shape is intentionally similar to scripts.collect_trajectories.build_page_state.
+        Shape is intentionally similar to scripts.data_collection.collect_raw_trajectories.build_page_state.
         """
         url = observation.get("url", "")
         dom_html = observation.get("dom", "") or ""
@@ -649,4 +649,3 @@ async def test_orchestrator() -> None:
 
 if __name__ == "__main__":
     asyncio.run(test_orchestrator())
-

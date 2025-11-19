@@ -1,0 +1,12 @@
+﻿name: exp_002_ablation_no_thought
+summary: "Planner without thought tokens"
+data:
+  raw_dir: data/raw
+  annotated_dir: data/annotated
+training:
+  planner_checkpoint: checkpoints/vit5
+  controller_checkpoint: checkpoints/controller
+  max_steps: 15
+teacher:
+  enabled: true
+  backend: gemini

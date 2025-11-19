@@ -1,4 +1,4 @@
-# scripts/train_vit5_planner.py
+# scripts/training/train_planner.py
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AdamW

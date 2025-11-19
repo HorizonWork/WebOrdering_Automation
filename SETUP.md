@@ -115,7 +115,7 @@ playwright install chromium firefox
 #### Step 6: Download Pre-trained Models
 
 ```bash
-python scripts/download_models.py
+python scripts/training/download_models.py
 # Downloads: PhoBERT, ViT5, and auxiliary models
 # Size: ~2.5 GB
 # Location: ./checkpoints/

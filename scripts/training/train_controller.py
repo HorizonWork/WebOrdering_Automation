@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Huấn luyện ViT5 + LoRA cho sinh hành động (SFT), KHÔNG dùng `datasets`.
 
@@ -11,7 +11,7 @@ Lưu ra:
   checkpoints/vit5/  (model + tokenizer)
 
 Ví dụ chạy:
-  python scripts/train_vit5.py ^
+  python scripts/training/train_controller.py ^
     --train data/processed/sft_train.jsonl ^
     --val   data/processed/sft_val.jsonl ^
     --out_dir checkpoints/vit5 ^
@@ -139,7 +139,7 @@ def main():
     elif use_bf16:
         dtype = torch.bfloat16
 
-    print(f"[train_vit5] precision: fp16={use_fp16}, bf16={use_bf16}, dtype={dtype}")
+    print(f"[train_controller] precision: fp16={use_fp16}, bf16={use_bf16}, dtype={dtype}")
 
     # -------- Tokenizer & Model --------
     tok = AutoTokenizer.from_pretrained(args.base_model)
@@ -220,3 +220,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

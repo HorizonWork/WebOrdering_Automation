@@ -2,11 +2,11 @@
 """
 Generate schema-aligned samples for Planner and Controller from collected episodes.
 
-This script reads `ep_*.json` files produced by `scripts/collect_trajectories.py`
+This script reads `ep_*.json` files produced by `scripts/data_collection/collect_raw_trajectories.py`
 and emits two JSONL files:
 
-  - `data/schema_samples/planner_samples.jsonl`
-  - `data/schema_samples/controller_samples.jsonl`
+  - `data/processed/planner/train.jsonl`
+  - `data/processed/controller/train.jsonl` (optional via flag)
 
 Each line is a training/example row:
   - Planner:   {episode_id, step, planner_input, planner_output, ...}
@@ -158,7 +158,7 @@ def extract_teacher_labels(step: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[s
     """
     Extract planner/controller labels from teacher_labels if present.
 
-    Expected structure (per collect_trajectories.Teacher prompt):
+    Expected structure (per collect_raw_trajectories.Teacher prompt):
     {
       "planner": { "next_plan_step": {...}, ... },
       "controller": {
@@ -322,19 +322,25 @@ def write_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
-def main() -> None:
+def main(default_dataset: str = "both") -> None:
     ap = argparse.ArgumentParser(
         description="Generate Planner/Controller schema samples from collected episodes."
     )
     ap.add_argument(
         "--episodes_dir",
-        default="data/trajectories/shopping/episodes",
-        help="Folder containing ep_*.json produced by collect_trajectories.py.",
+        default="data/raw/lazada/episodes",
+        help="Folder chứa ep_*.json (vd: data/raw/shopee/episodes).",
     )
     ap.add_argument(
-        "--out_dir",
-        default="data/schema_samples",
-        help="Output folder for planner_samples.jsonl and controller_samples.jsonl.",
+        "--processed_dir",
+        default="data/processed",
+        help="Root folder cho processed splits (planner/..., controller/...).",
+    )
+    ap.add_argument(
+        "--dataset",
+        choices=["planner", "controller", "both"],
+        default=default_dataset,
+        help="Chọn dataset cần build.",
     )
     ap.add_argument(
         "--max_episodes",
@@ -351,7 +357,7 @@ def main() -> None:
     args = ap.parse_args()
 
     episodes_dir = Path(args.episodes_dir)
-    out_dir = Path(args.out_dir)
+    processed_dir = Path(args.processed_dir)
 
     max_eps = args.max_episodes if args.max_episodes > 0 else None
     episodes = load_episodes(episodes_dir, max_eps)
@@ -375,18 +381,20 @@ def main() -> None:
             planner_rows.append(build_planner_sample(ep, s, steps))
             controller_rows.append(build_controller_sample(ep, s, steps))
 
-    if not planner_rows:
-        print("[warn] No Planner samples generated (no steps with page_state).")
-    if not controller_rows:
-        print("[warn] No Controller samples generated (no steps with page_state).")
+    if args.dataset in ("planner", "both"):
+        if not planner_rows:
+            print("[warn] No Planner samples generated (no steps with page_state).")
+        planner_path = processed_dir / "planner" / "train.jsonl"
+        write_jsonl(planner_path, planner_rows)
+        print(f"[ok] Wrote {len(planner_rows)} planner samples to {planner_path}")
 
-    write_jsonl(out_dir / "planner_samples.jsonl", planner_rows)
-    write_jsonl(out_dir / "controller_samples.jsonl", controller_rows)
-
-    print(f"[ok] Wrote {len(planner_rows)} planner_samples to {out_dir / 'planner_samples.jsonl'}")
-    print(f"[ok] Wrote {len(controller_rows)} controller_samples to {out_dir / 'controller_samples.jsonl'}")
+    if args.dataset in ("controller", "both"):
+        if not controller_rows:
+            print("[warn] No Controller samples generated (no steps with page_state).")
+        controller_path = processed_dir / "controller" / "train.jsonl"
+        write_jsonl(controller_path, controller_rows)
+        print(f"[ok] Wrote {len(controller_rows)} controller samples to {controller_path}")
 
 
 if __name__ == "__main__":
     main()
-

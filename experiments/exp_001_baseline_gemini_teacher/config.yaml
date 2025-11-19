@@ -1,0 +1,12 @@
+﻿name: exp_001_baseline_gemini_teacher
+summary: "Baseline with Gemini teacher labels"
+data:
+  raw_dir: data/raw
+  annotated_dir: data/annotated
+training:
+  planner_checkpoint: checkpoints/vit5
+  controller_checkpoint: checkpoints/controller
+  max_steps: 15
+teacher:
+  enabled: true
+  backend: gemini

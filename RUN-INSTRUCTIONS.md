@@ -33,7 +33,7 @@ F:\WebOrdering_Automation\woa\python.exe -m playwright install firefox
 
 ```powershell
 # Tải PhoBERT và ViT5 models
-F:\WebOrdering_Automation\woa\python.exe scripts/download_models.py
+F:\WebOrdering_Automation\woa\python.exe scripts/training/download_models.py
 ```
 
 ### Bước 4: Kiểm tra cài đặt
@@ -203,31 +203,31 @@ F:\WebOrdering_Automation\woa\python.exe -m src.orchestrator.agent_orchestrator
 ### Chuẩn bị dữ liệu
 
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/prepare_data.py
+F:\WebOrdering_Automation\woa\python.exe scripts/preprocessing/split_dataset.py
 ```
 
 ### Train ViT5 (Action Planner)
 
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/train_vit5.py
+F:\WebOrdering_Automation\woa\python.exe scripts/training/train_controller.py
 ```
 
 ### Train PhoBERT (Encoder)
 
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/train_phobert.py
+F:\WebOrdering_Automation\woa\python.exe scripts/preprocessing/build_embeddings.py
 ```
 
 ### Thu thập trajectories
 
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/collect_trajectories.py
+F:\WebOrdering_Automation\woa\python.exe scripts/data_collection/collect_raw_trajectories.py
 ```
 
 ### Đánh giá Agent
 
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/evaluate_agent.py
+F:\WebOrdering_Automation\woa\python.exe scripts/evaluation/run_benchmark.py
 ```
 
 ---
@@ -419,7 +419,7 @@ result = await agent.execute_task(
 
 - [ ] Đã cài đặt dependencies (`pip install -r requirements.txt`)
 - [ ] Đã cài đặt Playwright browsers (`playwright install chromium`)
-- [ ] Đã tải models Vietnamese (`python scripts/download_models.py`)
+- [ ] Đã tải models Vietnamese (`python scripts/training/download_models.py`)
 - [ ] Đã kiểm tra import thành công
 - [ ] Đã tạo file `.env` với config phù hợp
 - [ ] Đã test chạy agent với một task đơn giản

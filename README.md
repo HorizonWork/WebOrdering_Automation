@@ -53,7 +53,7 @@ F:\WebOrdering_Automation\woa\Scripts\pip.exe install -r requirements.txt
 F:\WebOrdering_Automation\woa\python.exe -m playwright install chromium
 
 # Tải các models Vietnamese
-F:\WebOrdering_Automation\woa\python.exe scripts/download_models.py
+F:\WebOrdering_Automation\woa\python.exe scripts/training/download_models.py
 
 # Kiểm tra cài đặt
 F:\WebOrdering_Automation\woa\python.exe -c "import src; print('✓ Installation OK')"
@@ -212,18 +212,59 @@ WOA-Agent/
 │       └── mock_screenshots/
 │
 ├── scripts/
-│   ├── train_phobert.py (PhoBERT fine-tuning)
-│   ├── train_vit5.py (ViT5 fine-tuning)
-│   ├── collect_trajectories.py (data collection)
-│   ├── evaluate_agent.py (benchmark evaluation)
-│   ├── deploy.sh (deployment script)
+│   ├── data_collection/
+│   │   ├── collect_raw_trajectories.py (browser automation collector)
+│   │   ├── validate_raw.py (raw episode validation)
+│   │   └── tasks/ (YAML task definitions)
+│   ├── annotation/
+│   │   ├── gemini_annotator.py (Gemini labeling)
+│   │   └── batch_annotate.py (batch pipeline)
+│   ├── preprocessing/
+│   │   ├── build_planner_dataset.py (planner extraction)
+│   │   ├── build_controller_dataset.py (controller extraction)
+│   │   └── split_dataset.py (train/val/test split)
+│   ├── training/
+│   │   ├── train_planner.py (ViT5 + LoRA)
+│   │   └── train_controller.py (controller fine-tuning)
+│   ├── evaluation/
+│   │   ├── run_benchmark.py (benchmark evaluation)
+│   │   └── error_analysis.py (failure analysis)
 │   └── setup_db.py (vector DB initialization)
 │
+├── evaluation/
+│   ├── metrics.py (metric helpers)
+│   ├── benchmarks/ (Shopee/Lazada benchmark tasks + schema)
+│   ├── baselines/ (Gemini/GPT-4/rule baselines)
+│   └── results/ (timestamped benchmark runs + comparison CSV)
+
 ├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_model_validation.ipynb
-│   └── 03_agent_debugging.ipynb
+│   ├── 01_data_collection/
+│   │   ├── collect_demo.ipynb
+│   │   ├── validate_raw.ipynb
+│   │   └── dataset_statistics.ipynb
+│   ├── 02_annotation/
+│   │   ├── gemini_annotation_demo.ipynb
+│   │   ├── annotation_quality.ipynb
+│   │   └── annotation_cost_analysis.ipynb
+│   ├── 03_preprocessing/
+│   │   ├── build_training_data.ipynb
+│   │   └── embedding_analysis.ipynb
+│   ├── 04_training/
+│   │   ├── train_planner.ipynb
+│   │   ├── train_controller.ipynb
+│   │   └── convergence_analysis.ipynb
+│   └── 05_evaluation/
+│       ├── benchmark_results.ipynb
+│       ├── ablation_study.ipynb
+│       ├── error_analysis.ipynb
+│       └── case_studies.ipynb
 │
+├── paper/
+│   ├── latex/ (main.tex + sections: abstract, introduction, related_work, methodology, data_collection, gemini_annotation, experiments, results, conclusion)
+│   ├── figures/ (architecture.pdf, data_flow.pdf, annotation_quality.pdf, results_comparison.pdf, ablation_study.pdf, trajectory_example.pdf)
+│   ├── tables/ (dataset_statistics.tex, annotation_quality.tex, benchmark_results.tex, ablation_results.tex, baseline_comparison.tex)
+│   └── supplementary/ (full_schema.pdf, annotation_prompts.pdf, sample_trajectories.pdf, quality_samples.pdf)
+
 ├── docs/
 │   ├── architecture.md (system design)
 │   ├── api_reference.md (API docs)

@@ -212,18 +212,53 @@ WOA-Agent/
 │       └── mock_screenshots/          # Sample screenshots
 │
 ├── scripts/
-│   ├── train_phobert.py               # PhoBERT fine-tuning
-│   ├── train_vit5.py                  # ViT5 fine-tuning
-│   ├── collect_trajectories.py        # Data collection
-│   ├── evaluate_agent.py              # Evaluation pipeline
-│   ├── download_models.py             # Model downloading
-│   └── deploy.sh                      # Deployment script
+│   ├── data_collection/
+│   │   ├── collect_raw_trajectories.py    # Browser automation collector
+│   │   ├── validate_raw.py                # Raw data validation
+│   │   └── tasks/                         # YAML task definitions
+│   ├── annotation/
+│   │   ├── gemini_annotator.py            # Gemini annotator
+│   │   └── batch_annotate.py              # Batch labeling
+│   ├── preprocessing/
+│   │   ├── build_planner_dataset.py       # Planner extraction
+│   │   ├── build_controller_dataset.py    # Controller extraction
+│   │   └── split_dataset.py               # Split train/val/test
+│   ├── training/
+│   │   ├── train_planner.py               # Planner fine-tuning
+│   │   └── train_controller.py            # Controller fine-tuning
+│   ├── evaluation/
+│   │   ├── run_benchmark.py               # Agent evaluation
+│   │   └── error_analysis.py              # Failure analysis
+│   └── deploy.sh                          # Deployment script
 │
 ├── notebooks/
-│   ├── 01_data_exploration.ipynb      # Data analysis
-│   ├── 02_model_validation.ipynb      # Model testing
-│   └── 03_agent_debugging.ipynb       # Debugging guide
+│   ├── 01_data_collection/
+│   │   ├── collect_demo.ipynb
+│   │   ├── validate_raw.ipynb
+│   │   └── dataset_statistics.ipynb
+│   ├── 02_annotation/
+│   │   ├── gemini_annotation_demo.ipynb
+│   │   ├── annotation_quality.ipynb
+│   │   └── annotation_cost_analysis.ipynb
+│   ├── 03_preprocessing/
+│   │   ├── build_training_data.ipynb
+│   │   └── embedding_analysis.ipynb
+│   ├── 04_training/
+│   │   ├── train_planner.ipynb
+│   │   ├── train_controller.ipynb
+│   │   └── convergence_analysis.ipynb
+│   └── 05_evaluation/
+│       ├── benchmark_results.ipynb
+│       ├── ablation_study.ipynb
+│       ├── error_analysis.ipynb
+│       └── case_studies.ipynb
 │
+├── paper/
+│   ├── latex/ (main.tex, sections/, references.bib, acmart.cls)
+│   ├── figures/ (architecture.pdf, data_flow.pdf, annotation_quality.pdf, results_comparison.pdf, ablation_study.pdf, trajectory_example.pdf)
+│   ├── tables/ (dataset_statistics.tex, annotation_quality.tex, benchmark_results.tex, ablation_results.tex, baseline_comparison.tex)
+│   └── supplementary/ (full_schema.pdf, annotation_prompts.pdf, sample_trajectories.pdf, quality_samples.pdf)
+
 └── docs/
     ├── architecture.md                # System design
     ├── api_reference.md               # API documentation

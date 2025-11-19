@@ -1,4 +1,4 @@
-# scripts/prepare_data.py
+# scripts/preprocessing/split_dataset.py
 # -*- coding: utf-8 -*-
 """
 Chuẩn hoá dữ liệu cho Web Ordering Agent:
@@ -7,7 +7,7 @@ Chuẩn hoá dữ liệu cho Web Ordering Agent:
 - Split train/val/test và ghi JSONL
 
 Cách chạy:
-    python scripts/prepare_data.py \
+    python scripts/preprocessing/split_dataset.py \
         --intents_raw data/raw/intents \
         --sft_raw data/raw/sft \
         --out_dir data/processed \

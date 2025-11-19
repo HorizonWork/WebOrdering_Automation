@@ -631,7 +631,7 @@ training_data = [
 
 **Training Command:**
 ```bash
-python scripts/train_vit5.py \
+python scripts/training/train_controller.py \
     --model_name VietAI/vit5-base \
     --data_path data/shopee_trajectories.json \
     --use_lora \

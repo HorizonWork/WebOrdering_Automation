@@ -276,8 +276,18 @@ result = await agent.execute_task(
 #### Bước 5.3: Analyze Trajectory
 ```python
 # Sau khi chạy, xem trajectory
+import json
+from pathlib import Path
+
 buffer = TrajectoryBuffer()
-buffer.load("data/trajectories/latest.json")
+for ep_path in Path("data/trajectories/successful").glob("*.json"):
+    data = json.loads(ep_path.read_text(encoding="utf-8"))
+    buffer.add_trajectory(
+        query=data.get("goal", ""),
+        steps=data.get("steps", []),
+        success=True,
+        metadata=data.get("metadata"),
+    )
 
 for step in buffer.trajectories:
     print(f"State: {step['state']}")
@@ -333,17 +343,17 @@ print(f"Action: {action}")
 
 #### Bước 7.1: Prepare Data
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/prepare_data.py
+F:\WebOrdering_Automation\woa\python.exe scripts/preprocessing/split_dataset.py
 ```
 
 #### Bước 7.2: Train ViT5
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/train_vit5.py --epochs 3
+F:\WebOrdering_Automation\woa\python.exe scripts/training/train_controller.py --epochs 3
 ```
 
 #### Bước 7.3: Evaluate
 ```powershell
-F:\WebOrdering_Automation\woa\python.exe scripts/evaluate_agent.py
+F:\WebOrdering_Automation\woa\python.exe scripts/evaluation/run_benchmark.py
 ```
 
 ---

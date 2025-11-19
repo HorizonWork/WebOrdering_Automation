@@ -178,8 +178,8 @@ Danh sách các việc cần làm / nâng cấp quan trọng để đưa agent v
     ```
   - Gắn pipeline log này vào `AgentOrchestrator` (mode debug/collect).
 
-- [ ] **Hoàn thiện `scripts/collect_trajectories.py`**
-  - Viết script chạy agent trên một tập task demo (Shopee/Lazada), lưu episode log theo format trên vào `data/trajectories/`.
+- [ ] **Hoàn thiện `scripts/data_collection/collect_raw_trajectories.py`**
+  - Viết script chạy agent trên một tập task demo (Shopee/Lazada), lưu episode log theo format trên vào `data/raw/<platform>/episodes/` và mirror kết quả sang `data/trajectories/{successful,failed}/`.
   - Phân tách ngay từ đầu:
     - Mẫu `Planner`: `(goal + high_level_state + history_summary) → next_plan_step`.
     - Mẫu `Controller`: `(goal + plan_step + page_state + available_actions) → chosen_action_id`.
@@ -234,4 +234,3 @@ Danh sách các việc cần làm / nâng cấp quan trọng để đưa agent v
 2) P1 + P2 → kiến trúc Planner/Controller + guardrail/confirm user.  
 3) P3 → logging + dataset.  
 4) P4/P5 → tối ưu model, UI/UX, test & docs.  
-

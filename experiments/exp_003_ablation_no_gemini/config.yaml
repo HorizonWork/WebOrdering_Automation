@@ -1,0 +1,12 @@
+﻿name: exp_003_ablation_no_gemini
+summary: "Training on human demos only"
+data:
+  raw_dir: data/raw
+  annotated_dir: data/annotated
+training:
+  planner_checkpoint: checkpoints/vit5
+  controller_checkpoint: checkpoints/controller
+  max_steps: 15
+teacher:
+  enabled: true
+  backend: gemini
