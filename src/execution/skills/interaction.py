@@ -62,9 +62,11 @@ class InteractionSkills(BaseSkill):
         except Exception as e:
             return self._error(f"Hover failed: {str(e)}")
     
-    async def press(self, page, key: str, **kwargs):
+    async def press(self, page, key: str = "Enter", **kwargs):
         """Press keyboard key"""
         try:
+            if not key:
+                key = "Enter"
             await page.keyboard.press(key)
             return self._success(f"Pressed key '{key}'")
         except Exception as e:

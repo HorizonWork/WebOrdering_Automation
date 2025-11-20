@@ -1,16 +1,16 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Collect web interaction trajectories for training / analysis.
 
-- Gọi AgentOrchestrator để chạy 1 task (query + start_url)
-- Lấy history từ ReactEngine
-- Chuyển history thành EpisodeRecord (list StepRecord)
-- Lưu ra JSON trong data/raw/<platform>/{episodes|screenshots|dom_snapshots}/
-- Mirror episode JSON theo nhãn success/fail sang data/trajectories/{successful,failed}/
+- G?i AgentOrchestrator ?? ch?y 1 task (query + start_url)
+- L?y history t? ReactEngine
+- Chuy?n history th?nh EpisodeRecord (list StepRecord)
+- L?u ra JSON trong data/raw/<platform>/{episodes|screenshots|dom_snapshots}/
+- Mirror episode JSON theo nh?n success/fail sang data/trajectories/{successful,failed}/
 
-Lưu ý:
-    - Teacher (Gemini) là OPTIONAL, KHÔNG nên bật khi bạn không muốn dùng API.
-    - UIDetector được dùng để suy ra page_type, search_box,... từ DOM.
+L?u ?:
+    - Teacher (Gemini) l? OPTIONAL, KH?NG n?n b?t khi b?n kh?ng mu?n d?ng API.
+    - UIDetector ???c d?ng ?? suy ra page_type, search_box,... t? DOM.
 """
 
 from __future__ import annotations
@@ -28,6 +28,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+import yaml
 
 # ---------------------------------------------------------------------------
 # Resolve project root
@@ -83,12 +85,12 @@ class EpisodeRecord:
 
 
 def episode_to_json_dict(ep: EpisodeRecord) -> Dict[str, Any]:
-    """Convert EpisodeRecord (dataclass) thành dict để dump JSON."""
+    """Convert EpisodeRecord (dataclass) th?nh dict ?? dump JSON."""
     return asdict(ep)
 
 
 # ---------------------------------------------------------------------------
-# Teacher LLM (OPTIONAL – bạn có thể bỏ qua hoàn toàn phần này)
+# Teacher LLM (OPTIONAL ? b?n c? th? b? qua ho?n to?n ph?n n?y)
 # ---------------------------------------------------------------------------
 
 
@@ -104,10 +106,10 @@ class TeacherBase:
 
 class GeminiTeacher(TeacherBase):
     """
-    Wrapper cho Gemini API với JSON mode.
+    Wrapper cho Gemini API v?i JSON mode.
 
-    KHÔNG dùng nếu bạn không muốn gọi API:
-    - Đừng truyền --with_teacher
+    KH?NG d?ng n?u b?n kh?ng mu?n g?i API:
+    - ??ng truy?n --with_teacher
     """
 
     def __init__(
@@ -118,17 +120,17 @@ class GeminiTeacher(TeacherBase):
         try:
             import google.generativeai as genai
         except ImportError as exc:
-            raise RuntimeError("Thiếu thư viện: pip install google-generativeai") from exc
+            raise RuntimeError("Thi?u th? vi?n: pip install google-generativeai") from exc
 
         api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not api_key:
-            logger.warning("⚠️ Thiếu GEMINI_API_KEY, Teacher sẽ không hoạt động.")
+            logger.warning("?? Thi?u GEMINI_API_KEY, Teacher s? kh?ng ho?t ??ng.")
             self._model = None
             return
 
         genai.configure(api_key=api_key)
 
-        # Cấu hình model trả về JSON
+        # C?u h?nh model tr? v? JSON
         self._model = genai.GenerativeModel(
             model_name,
             generation_config={"response_mime_type": "application/json"},
@@ -162,7 +164,7 @@ class GeminiTeacher(TeacherBase):
         )
 
         try:
-            # Rate limiting để tránh 429 (nếu có dùng)
+            # Rate limiting ?? tr?nh 429 (n?u c? d?ng)
             time.sleep(4)
             resp = self._model.generate_content(prompt_text)
             raw = resp.text or ""
@@ -228,19 +230,48 @@ def mirror_episode_to_outcome(episode_path: Path, success: bool, trajectory_root
 
 def load_tasks(tasks_path: Optional[str]) -> List[Tuple[str, str]]:
     """
-    Đọc file tasks.jsonl (mỗi dòng: {"query": "...", "url": "..."})
-    Trả về list (query, url).
+    ??c tasks t? JSONL ({"query": "...", "url": "..."}), JSON list, ho?c YAML list.
+    Tr? v? list (query, url).
     """
     if not tasks_path:
         return []
     p = Path(tasks_path)
     if not p.exists():
-        raise FileNotFoundError(f"File tasks không tồn tại: {p}")
+        raise FileNotFoundError(f"Task file not found: {p}")
 
     pairs: List[Tuple[str, str]] = []
-    text = p.read_text(encoding="utf-8").strip()
 
-    for line in text.splitlines():
+    if p.suffix.lower() in {".yml", ".yaml"}:
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning(f"Could not parse YAML tasks: {exc}")
+            return pairs
+
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict) and "query" in item and "url" in item:
+                    pairs.append((str(item["query"]), str(item["url"])))
+                else:
+                    logger.warning(f"Skip invalid YAML task: {item!r}")
+        else:
+            logger.warning("YAML tasks file must be a list of {query,url}.")
+        return pairs
+
+    text_block = p.read_text(encoding="utf-8").strip()
+
+    if p.suffix.lower() == ".json" and text_block:
+        try:
+            data = json.loads(text_block)
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and "query" in item and "url" in item:
+                        pairs.append((item["query"], item["url"]))
+                return pairs
+        except Exception as exc:
+            logger.warning(f"Could not parse JSON tasks: {exc}")
+
+    for line in text_block.splitlines():
         if not line.strip():
             continue
         try:
@@ -248,107 +279,8 @@ def load_tasks(tasks_path: Optional[str]) -> List[Tuple[str, str]]:
             if "query" in row and "url" in row:
                 pairs.append((row["query"], row["url"]))
         except Exception:
-            logger.warning(f"Không parse được dòng task: {line!r}")
+            logger.warning(f"Could not parse task line: {line!r}")
     return pairs
-
-
-def build_page_state(observation: Dict[str, Any], ui_detector: UIDetector) -> Dict[str, Any]:
-    """
-    Tạo snapshot trạng thái trang gọn nhẹ từ observation của orchestrator.
-
-    observation dự kiến chứa:
-        - url: str
-        - dom: str (HTML)
-        - interactive_elements: list[...] (từ DOMDistiller)
-        - vision_state: dict (từ OmniParser / VisionEnhancer – nếu có)
-    """
-    url = observation.get("url", "")
-    dom_html = observation.get("dom", "") or ""
-    elements = observation.get("interactive_elements") or []
-    vision_state = observation.get("vision_state") or {}
-
-    # Detect UI (page_type, search_box, product_listing, ...)
-    ui_info: Dict[str, Any] = {"page_type": "generic"}
-    if dom_html:
-        try:
-            # UIDetector.detect_all chỉ nhận 1 tham số: html
-            ui_info = ui_detector.detect_all(dom_html) or {"page_type": "generic"}
-        except Exception as e:
-            logger.warning(f"UIDetector failed: {e}")
-            ui_info = {"page_type": "generic"}
-
-    return {
-        "url": url,
-        "page_type": ui_info.get("page_type", "generic"),
-        "dom_state": {
-            "element_count": len(elements),
-            "has_search": bool(ui_info.get("search_box", {}).get("found")),
-        },
-        "elements": elements,          # bạn có thể cắt bớt nếu quá dài
-        "ui_detection": ui_info,
-        "vision_state": vision_state,
-    }
-
-
-def history_to_step_records(
-    history: List[Dict[str, Any]],
-    goal: str,
-    ui_detector: UIDetector,
-    teacher: Optional[TeacherBase],
-) -> List[StepRecord]:
-    """
-    Convert history (ReactEngine) -> list StepRecord.
-
-    history[i] dự kiến có:
-      - timestamp
-      - thought
-      - action
-      - result
-      - observation
-    """
-    records: List[StepRecord] = []
-    total_steps = len(history)
-
-    logger.info(f"📝 Converting {total_steps} steps to StepRecord...")
-
-    for idx, h in enumerate(history):
-        obs = h.get("observation", {}) or {}
-        page_state = build_page_state(obs, ui_detector)
-
-        labels = None
-        if teacher:
-            # Teacher là optional – chỉ dùng nếu bạn bật --with_teacher
-            if (idx + 1) % 2 == 0:
-                logger.info(f"   Teacher labeling step {idx+1}/{total_steps}...")
-
-            short_hist = [
-                {"action": s.get("action"), "result": s.get("result")}
-                for s in history[max(0, idx - 3) : idx]
-            ]
-            labels = teacher.annotate_step(goal, page_state, short_hist)
-
-        records.append(
-            StepRecord(
-                step=idx + 1,
-                timestamp=h.get("timestamp", ""),
-                thought=h.get("thought", ""),
-                action=h.get("action", {}),
-                result=h.get("result", {}),
-                page_state=page_state,
-                teacher_labels=labels,
-            )
-        )
-    return records
-
-
-def execution_result_to_status(result: ExecutionResult, history_len: int, max_steps: int) -> str:
-    if not result.success and result.error:
-        return "ERROR"
-    if result.success:
-        return "SUCCESS"
-    if history_len >= max_steps:
-        return "TIMEOUT"
-    return "FAIL"
 
 
 # ---------------------------------------------------------------------------
@@ -368,7 +300,7 @@ async def collect_one_episode(
     teacher: Optional[TeacherBase] = None,
     policy: str = "react",
 ) -> Optional[Path]:
-    logger.info(f"\n🔹 START EPISODE: {query}")
+    logger.info(f"\n?? START EPISODE: {query}")
     logger.info(f"   URL: {start_url}")
     platform_name = determine_platform(start_url, platform_hint)
     logger.info(f"   Platform bucket: {platform_name}")
@@ -392,10 +324,10 @@ async def collect_one_episode(
             policy=policy,
         )
     except Exception as e:
-        logger.error(f"❌ CRITICAL ERROR during execution: {e}")
+        logger.error(f"? CRITICAL ERROR during execution: {e}")
         error_msg = str(e)
     finally:
-        logger.info("💾 Saving trajectory data...")
+        logger.info("?? Saving trajectory data...")
 
         try:
             history = orchestrator.react_engine.get_history()
@@ -403,7 +335,7 @@ async def collect_one_episode(
             history = []
 
         if not history and not error_msg:
-            logger.warning("⚠️ Empty history and no error. Nothing to save.")
+            logger.warning("?? Empty history and no error. Nothing to save.")
             await orchestrator.close()
             return None
 
@@ -439,34 +371,21 @@ async def collect_one_episode(
             json_content = json.dumps(episode_to_json_dict(ep), ensure_ascii=False, indent=2)
             save_path.write_text(json_content, encoding="utf-8")
 
-            logger.info(f"✅ Episode saved: {save_path} (Status: {final_status}, Platform: {platform_name})")
+            logger.info(f"? Episode saved: {save_path} (Status: {final_status}, Platform: {platform_name})")
             mirror_episode_to_outcome(save_path, ep.success, trajectory_root)
 
             await orchestrator.close()
             return save_path
 
         except Exception as save_err:
-            logger.error(f"🔥 Failed to save episode file: {save_err}")
+            logger.error(f"?? Failed to save episode file: {save_err}")
             traceback.print_exc()
             await orchestrator.close()
             return None
 
 
-async def async_main(args: argparse.Namespace):
+async def async_main(args: argparse.Namespace) -> None:
     setup_logging(level=args.log_level, log_file=None)
-
-    raw_root_path = Path(args.raw_root)
-    if args.out_dir:
-        logger.warning("--out_dir is deprecated. Please switch to --raw_root.")
-        raw_root_path = Path(args.out_dir)
-    raw_root = ensure_dir(raw_root_path)
-    trajectory_root = ensure_dir(Path(args.trajectory_root))
-
-    # Setup Teacher (optional)
-    teacher: Optional[TeacherBase] = None
-    if args.with_teacher:
-        logger.info(f"🎓 Initializing Teacher ({args.teacher_backend})...")
-        teacher = build_teacher(args.teacher_backend, args.teacher_model)
 
     tasks = load_tasks(args.tasks)
     if not tasks and args.query and args.url:
@@ -475,10 +394,34 @@ async def async_main(args: argparse.Namespace):
     if args.episodes:
         tasks = tasks[: args.episodes]
 
-    logger.info(f"🚀 Starting collection for {len(tasks)} tasks.")
+    if not tasks:
+        logger.error("Khong tim thay task nao. Bo sung --tasks (jsonl/yaml) hoac --query va --url.")
+        return
+
+    raw_root_path = Path(args.raw_root)
+    if args.out_dir:
+        logger.warning("--out_dir is deprecated. Please switch to --raw_root.")
+        raw_root_path = Path(args.out_dir)
+    raw_root = ensure_dir(raw_root_path)
+    trajectory_root = ensure_dir(Path(args.trajectory_root))
+
+    teacher: Optional[TeacherBase] = None
+    if args.with_teacher:
+        logger.info(f"?? Initializing Teacher ({args.teacher_backend})...")
+        try:
+            teacher = build_teacher(args.teacher_backend, args.teacher_model)
+        except Exception as exc:
+            logger.error(f"Teacher init failed, continue without teacher: {exc}")
+            teacher = None
+
+    logger.info(f"?? Starting collection for {len(tasks)} tasks.")
 
     for i, (q, u) in enumerate(tasks, 1):
         logger.info(f"--- Task {i}/{len(tasks)} ---")
+        if args.policy == "human_teleop":
+            logger.info("Human Teleop: Forcing headless=False so you can see the browser.")
+            args.headless = False
+
         await collect_one_episode(
             query=q,
             start_url=u,
@@ -493,12 +436,12 @@ async def async_main(args: argparse.Namespace):
         )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="WOA Data Collector")
 
     parser.add_argument("--query", help="Task query")
     parser.add_argument("--url", help="Start URL")
-    parser.add_argument("--tasks", help="Path to tasks.jsonl")
+    parser.add_argument("--tasks", help="Path to tasks.jsonl or .yaml")
     parser.add_argument("--episodes", type=int, help="Max episodes to run")
     parser.add_argument("--user_data_dir", help="Path to Chrome User Data (Profile)")
     parser.add_argument("--headless", action="store_true", help="Run headless")
@@ -506,23 +449,23 @@ def main():
     parser.add_argument(
         "--trajectory_root",
         default="data/trajectories",
-        help="Folder chứa phân loại trajectories successful/failed.",
+        help="Folder ch?a ph?n lo?i trajectories successful/failed.",
     )
     parser.add_argument(
         "--platform",
         default="auto",
         choices=["auto", "shopee", "lazada", "misc"],
-        help="Bucket platform cho data/raw. auto = đoán từ start_url.",
+        help="Bucket platform cho data/raw. auto = ?o?n t? start_url.",
     )
     parser.add_argument(
         "--out_dir",
         default=None,
-        help="[Deprecated] Alias cho --raw_root (sẽ bỏ trong tương lai).",
+        help="[Deprecated] Alias cho --raw_root (s? b? trong t??ng lai).",
     )
     parser.add_argument("--max_steps", type=int, default=15)
     parser.add_argument("--log_level", default="INFO")
 
-    # Teacher options (optional, có thể bỏ qua nếu không muốn dùng API)
+    # Teacher options (optional, c? th? b? qua n?u kh?ng mu?n d?ng API)
     parser.add_argument("--with_teacher", action="store_true", help="Enable teacher model for auto labels")
     parser.add_argument("--teacher_backend", default="gemini")
     parser.add_argument("--teacher_model", default="gemini-2.0-flash")
@@ -546,4 +489,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

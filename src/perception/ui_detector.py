@@ -16,6 +16,9 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.utils.logger import get_logger
 
+from src.utils.logger import get_logger
+import yaml
+
 logger = get_logger(__name__)
 
 
@@ -77,7 +80,49 @@ class UIDetector:
             }
         }
         
+        self.selectors_config = self._load_selectors_config()
+        
         logger.info("UIDetector initialized")
+    
+    def _load_selectors_config(self) -> Dict:
+        """Load selectors from config/selectors.yaml"""
+        config_path = ROOT_DIR / "config" / "selectors.yaml"
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return yaml.safe_load(f) or {}
+            except Exception as e:
+                logger.warning(f"Failed to load selectors.yaml: {e}")
+                return {}
+        return {}
+
+    def detect_platform_specific_elements(self, html: str, platform: str) -> Dict:
+        """
+        Detect elements using platform-specific selectors from config.
+        
+        Args:
+            html: HTML string
+            platform: 'shopee' or 'lazada'
+            
+        Returns:
+            Dict of detected elements
+        """
+        if not self.selectors_config or platform not in self.selectors_config:
+            return {}
+            
+        soup = BeautifulSoup(html, 'html.parser')
+        platform_selectors = self.selectors_config[platform]
+        results = {}
+        
+        for key, selector in platform_selectors.items():
+            elements = soup.select(selector)
+            results[key] = {
+                'found': bool(elements),
+                'count': len(elements),
+                'selector': selector
+            }
+            
+        return results
     
     def detect_all(self, html: str) -> Dict:
         """
@@ -102,6 +147,16 @@ class UIDetector:
         # Infer page type
         results['page_type'] = self._infer_page_type(results)
         
+        # Try to detect platform specific elements if we can guess platform
+        # This is a heuristic - in real usage, platform might be passed in
+        soup = BeautifulSoup(html, 'html.parser')
+        text_content = soup.get_text().lower()
+        
+        if 'shopee' in text_content:
+             results['platform_specific'] = self.detect_platform_specific_elements(html, 'shopee')
+        elif 'lazada' in text_content:
+             results['platform_specific'] = self.detect_platform_specific_elements(html, 'lazada')
+
         logger.info(f"✓ UI detection complete: {results['page_type']}")
         
         return results

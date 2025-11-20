@@ -490,33 +490,66 @@ class AgentOrchestrator:
         start_url: str,
     ) -> Optional[Dict]:
         """
-        Placeholder for human teleoperation loop.
-
-        Currently not implemented; records a single 'complete' step so that
-        collectors can still save a trajectory without crashing.
+        Human teleoperation loop for manual data collection.
         """
-        logger.warning(
-            "human_teleop policy not implemented yet. Ending immediately "
-            "with a stub 'complete' action."
-        )
-
+        logger.info("Starting HUMAN TELEOPERATION mode.")
+        logger.info("1. Interact with the browser window manually.")
+        logger.info("2. Return to this terminal and press Enter to record the step.")
+        logger.info("3. Type 'q' or 'quit' to finish the episode.")
+        
+        step = 0
+        last_action: Optional[Dict] = None
+        
+        # Initial observation
         observation = await self._perceive(page)
-        result: Dict[str, Any] = {
-            "status": "success",
-            "message": "human_teleop policy not implemented; auto-completed.",
-        }
-        action: Dict[str, Any] = {
-            "skill": "complete",
-            "params": {"message": "human_teleop stub"},
-        }
+        self.state_manager.update_state(observation)
 
-        self.react_engine.add_step(
-            step_num=1,
-            thought="(human_teleop stub)",
-            action=action,
-            observation=observation,
-            result=result,
-        )
+        while True:
+            step += 1
+            print(f"\n--- Step {step} ---")
+            user_input = await asyncio.get_event_loop().run_in_executor(
+                None, input, "Press Enter to record step (or type 'q' to finish): "
+            )
+            
+            if user_input.lower() in ("q", "quit", "exit"):
+                logger.info("User requested to finish task.")
+                break
+                
+            # Capture state AFTER user interaction
+            logger.info("Capturing state...")
+            observation = await self._perceive(page)
+            self.state_manager.update_state(observation)
+            
+            # Ask for action description (optional)
+            action_desc = "human_action"
+            # We could ask for more details here if needed, e.g.:
+            # action_desc = input("Describe action (default: human_action): ") or "human_action"
+
+            action = {
+                "skill": "human_action",
+                "params": {
+                    "description": action_desc,
+                    "raw_input": user_input
+                }
+            }
+            
+            result = {
+                "status": "success",
+                "message": "Recorded human action"
+            }
+
+            self.react_engine.add_step(
+                step_num=step,
+                thought="(human teleop)",
+                action=action,
+                observation=observation,
+                result=result,
+            )
+            
+            last_action = action
+            logger.info("Step %d recorded.", step)
+
+        return last_action
 
         return action
 

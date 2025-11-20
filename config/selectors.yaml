@@ -1,0 +1,13 @@
+shopee:
+  search_input: "input.shopee-searchbar-input__input"
+  search_button: "button.btn-solid-primary"
+  product_item: "div[data-sqe='item'] a"
+  product_price: "div[data-sqe='name'] + div"
+  popup_close: "div.shopee-popup__close-btn"
+  
+lazada:
+  search_input: "#q"
+  search_button: "button.search-box__button--1oH7"
+  product_item: "div[data-qa-locator='product-item'] a"
+  product_price: "span.ooOxS"
+  buy_now_button: "button.pdp-button_theme_orange"

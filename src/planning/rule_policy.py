@@ -23,6 +23,10 @@ class RulePolicy:
         self.last_action_type: Optional[str] = None
         self.last_action_params: Optional[Dict] = None
         self.consecutive_failures = 0
+        
+        # Initialize UIDetector to access config
+        from src.perception.ui_detector import UIDetector
+        self.ui_detector = UIDetector()
 
     def select_action(
         self,
@@ -81,9 +85,12 @@ class RulePolicy:
                 return self._record("press", {"key": "Enter"})
             
             # Tìm ô search
-            search_sel = "input.shopee-searchbar-input__input"
+            # Ưu tiên dùng selector từ config nếu có
+            search_sel = "input.shopee-searchbar-input__input" # Default fallback
+            if self.ui_detector.selectors_config and "shopee" in self.ui_detector.selectors_config:
+                 search_sel = self.ui_detector.selectors_config["shopee"].get("search_input", search_sel)
+            
             # Nếu tìm thấy hoặc chưa thử fill -> Fill
-            # (Giả định selector luôn đúng với Shopee Web)
             return self._record("fill", {"selector": search_sel, "text": goal})
 
         # --- PHASE 2: PRODUCT LISTING ---
@@ -102,6 +109,11 @@ class RulePolicy:
             
             # Selector này trỏ vào thẻ <a> bao quanh sản phẩm
             target_sel = f"div[data-sqe='item'] >> nth={idx} >> a"
+            if self.ui_detector.selectors_config and "shopee" in self.ui_detector.selectors_config:
+                 base_item_sel = self.ui_detector.selectors_config["shopee"].get("product_item", "div[data-sqe='item'] a")
+                 # Cần xử lý logic nth-match nếu selector base không hỗ trợ sẵn
+                 # Ở đây giả định selector base trả về list items
+                 target_sel = f"{base_item_sel} >> nth={idx}"
             
             return self._record("click", {"selector": target_sel})
 
@@ -130,7 +142,11 @@ class RulePolicy:
                  return self._record("press", {"key": "Enter"})
             
             # Lazada Search ID = q
-            return self._record("fill", {"selector": "#q", "text": goal})
+            search_sel = "#q"
+            if self.ui_detector.selectors_config and "lazada" in self.ui_detector.selectors_config:
+                 search_sel = self.ui_detector.selectors_config["lazada"].get("search_input", search_sel)
+
+            return self._record("fill", {"selector": search_sel, "text": goal})
 
         # --- PHASE 2: PRODUCT LISTING ---
         if "catalog" in url or "search" in url:
@@ -141,6 +157,10 @@ class RulePolicy:
             # Selector: div[data-qa-locator="product-item"] a
             idx = random.randint(0, 3)
             target_sel = f"div[data-qa-locator='product-item'] >> nth={idx} >> a"
+            
+            if self.ui_detector.selectors_config and "lazada" in self.ui_detector.selectors_config:
+                 base_item_sel = self.ui_detector.selectors_config["lazada"].get("product_item", "div[data-qa-locator='product-item'] a")
+                 target_sel = f"{base_item_sel} >> nth={idx}"
             
             return self._record("click", {"selector": target_sel})
 
