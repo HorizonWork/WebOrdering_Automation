@@ -1,0 +1,46 @@
+# Shopee VN 2024 Selectors
+shopee:
+  search_input:
+    primary: "input.shopee-searchbar-input__input"
+    fallback:
+      - "input[type='search']"
+      - "input[placeholder*='tìm kiếm']"
+      - "//input[@type='search']"
+  
+  product_item:
+    primary: "a[data-sqe='link']"
+    fallback:
+      - "div.shopee-search-item-result__item a"
+      - "a[href*='/product/']"
+      - "//div[contains(@class, 'shopee-search-item-result__item')]//a"
+  
+  add_to_cart: "button[class*='add-to-cart']"
+  buy_now: "button[class*='buy-now']"
+  
+  popups:
+    close_buttons:
+      - "button[class*='icon-close']"
+      - "div[class*='popup-close']"
+      - "button[aria-label='Close']"
+
+# Lazada VN 2024 Selectors
+lazada:
+  search_input:
+    primary: "input.search-box__input--O34g"
+    fallback:
+      - "input[placeholder*='tìm kiếm']"
+      - "input[type='search']"
+      - "//input[contains(@placeholder, 'Search')]"
+  
+  product_item:
+    primary: "a.Bm3ON"
+    fallback:
+      - "div[data-sku-id] a"
+      - "a[href*='/products/']"
+      - "//div[contains(@class, 'Bm3ON')]//a"
+  
+  add_to_cart: "button[class*='add-to-cart']"
+  buy_now:
+    primary: "button:has-text('Mua ngay')"
+    fallback:
+      - "button[class*='pdp-button']"

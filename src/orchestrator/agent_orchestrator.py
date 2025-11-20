@@ -1,4 +1,4 @@
-"""
+﻿"""
 Agent Orchestrator - Main Control Loop
 Coordinates all 4 layers: Perception + Planning + Execution + (optional) Learning.
 """
@@ -23,6 +23,7 @@ from src.models.phobert_encoder import PhoBERTEncoder  # noqa: E402
 from src.models.vit5_planner import ViT5Planner  # noqa: E402
 from src.orchestrator.safety_guardrails import SafetyGuardrails  # noqa: E402
 from src.orchestrator.state_manager import StateManager  # noqa: E402
+from src.orchestrator.user_interaction import UserInteraction  # noqa: E402
 from src.perception.dom_distiller import DOMDistiller  # noqa: E402
 from src.perception.vision_enhancer import VisionEnhancer  # noqa: E402
 from src.perception.ui_detector import UIDetector  # noqa: E402
@@ -88,6 +89,7 @@ class AgentOrchestrator:
         self.phobert_checkpoint = phobert_checkpoint
         self.vit5_checkpoint = vit5_checkpoint
         self.user_data_dir = user_data_dir
+        self.user_interaction = UserInteraction(enabled=settings.enable_user_prompts)
 
         # If using persistent profile (data collection), avoid headless to reduce anti-bot detection.
         if self.user_data_dir and self.headless:
@@ -120,11 +122,23 @@ class AgentOrchestrator:
         phobert_model_name = self.phobert_checkpoint or "vinai/phobert-base-v2"
         self.phobert = PhoBERTEncoder(model_name=phobert_model_name)
 
-        self.vit5 = (
-            ViT5Planner(checkpoint_path=self.vit5_checkpoint)
-            if self.vit5_checkpoint
-            else ViT5Planner()
-        )
+        backend = settings.planner_backend.lower()
+        if backend == "gemini":
+            from src.models.gemini_planner import GeminiPlanner  # noqa: E402
+
+            model_list = [m.strip() for m in (settings.gemini_models or "").split(",") if m.strip()]
+            self.vit5 = GeminiPlanner(
+                model_candidates=model_list or None,
+                api_key=settings.gemini_api_key or None,
+            )
+            logger.info("Planner backend: Gemini (%s)", model_list or "default")
+        else:
+            self.vit5 = (
+                ViT5Planner(checkpoint_path=self.vit5_checkpoint)
+                if self.vit5_checkpoint
+                else ViT5Planner()
+            )
+            logger.info("Planner backend: HF ViT5")
 
         # Perception
         logger.info("  - Initializing perception...")
@@ -158,6 +172,8 @@ class AgentOrchestrator:
         if self.enable_guardrails:
             logger.info("  - Initializing safety guardrails...")
             self.guardrails = SafetyGuardrails()
+        else:
+            self.guardrails = None
 
         logger.info("All components initialized.")
 
@@ -357,6 +373,12 @@ class AgentOrchestrator:
                         "params": {"message": "Action blocked by guardrails"},
                     }
 
+            # User confirmation for risky actions
+            if not self._maybe_confirm_action(action, observation):
+                logger.info("User declined critical action; terminating.")
+                last_action = {"skill": "complete", "params": {"message": "user_declined"}}
+                break
+
             # LAYER 3: EXECUTION - Execute action
             result = await self.skill_executor.execute(page, action)
 
@@ -449,6 +471,11 @@ class AgentOrchestrator:
                             "message": "Action blocked by guardrails (rule_policy)"
                         },
                     }
+
+            if not self._maybe_confirm_action(action, observation):
+                logger.info("[RULE] User declined critical action; terminating.")
+                last_action = {"skill": "complete", "params": {"message": "user_declined"}}
+                break
 
             # Execute action
             result = await self.skill_executor.execute(page, action)
@@ -640,6 +667,71 @@ class AgentOrchestrator:
         return observation
 
     # ------------------------------------------------------------------
+    # User interaction
+    # ------------------------------------------------------------------
+
+    def _maybe_confirm_action(self, action: Dict[str, Any], observation: Dict[str, Any]) -> bool:
+        """
+        Prompt user before potentially sensitive actions (login/register/checkout/payment).
+        """
+        if not self.user_interaction.enabled:
+            return True
+
+        skill = (action or {}).get("skill", "").lower()
+        params = (action or {}).get("params") or {}
+        url = observation.get("url", "").lower()
+
+        risky_tokens = [
+            "login",
+            "dangnhap",
+            "signin",
+            "sign-in",
+            "register",
+            "dangky",
+            "signup",
+            "sign-up",
+            "checkout",
+            "pay",
+            "payment",
+            "order",
+            "placeorder",
+            "thanh-toan",
+            "dat-hang",
+        ]
+
+        def _contains_risky(val: str) -> bool:
+            lv = val.lower()
+            return any(tok in lv for tok in risky_tokens)
+
+        state_changing = skill in {
+            "click",
+            "goto",
+            "type",
+            "fill",
+            "press",
+            "submit",
+            "complete",
+        }
+        if not state_changing:
+            return True
+
+        need_confirm = any(tok in url for tok in risky_tokens)
+        if isinstance(params, dict):
+            for v in params.values():
+                if isinstance(v, str) and _contains_risky(v):
+                    need_confirm = True
+                    break
+
+        if not need_confirm:
+            return True
+
+        question = (
+            f"Action '{skill}' may involve login/checkout/payment. Proceed? "
+            f"(url={url or 'unknown'})"
+        )
+        return self.user_interaction.confirm(question, default=False)
+
+    # ------------------------------------------------------------------
     # Public helpers
     # ------------------------------------------------------------------
 
@@ -667,7 +759,7 @@ async def test_orchestrator() -> None:
     )
 
     result = await orchestrator.execute_task(
-        query="Mở trang ví dụ",
+        query="Mß╗ƒ trang v├¡ dß╗Ñ",
         start_url="https://example.com",
     )
 

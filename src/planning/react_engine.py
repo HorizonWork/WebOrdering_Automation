@@ -70,16 +70,18 @@ class ReActEngine:
         Initialize ReAct engine.
         
         Args:
-            planner: ViT5 planner (creates new if None)
+            planner: ViT5 planner (optional)
             max_steps: Maximum steps before termination
             history_window: Number of past steps to include in context
         """
-        self.planner = planner or ViT5Planner()
+        self.planner = planner
         self.max_steps = max_steps
         self.history_window = history_window
         self.history: List[ReActStep] = []
         
         logger.info(f"ReAct Engine initialized (max_steps={max_steps}, history_window={history_window})")
+        if not self.planner:
+            logger.info("⚠️ ReAct Engine initialized WITHOUT planner (teleop/rules only)")
     
     def reset(self):
         """Reset history"""

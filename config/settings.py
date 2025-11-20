@@ -44,12 +44,19 @@ class Settings:
     log_level: str = field(default_factory=lambda: os.getenv("AGENT_LOG_LEVEL", "INFO"))
     data_dir: str = field(default_factory=lambda: os.getenv("AGENT_DATA_DIR", "data"))
     device: str = field(default_factory=lambda: os.getenv("AGENT_DEVICE", "cuda" if _env_bool("CUDA_AVAILABLE", False) else "cpu"))
-    enable_vision: bool = field(default_factory=lambda: _env_bool("ENABLE_VISION", True))
+    # default tắt vision để tránh crash khi thiếu deps (timm/einops/transformers) hoặc không cần caption
+    enable_vision: bool = field(default_factory=lambda: _env_bool("AGENT_ENABLE_VISION", _env_bool("ENABLE_VISION", False)))
+    enable_user_prompts: bool = field(default_factory=lambda: _env_bool("AGENT_ENABLE_USER_PROMPTS", True))
     yolo_model_path: str = field(default_factory=lambda: os.getenv("YOLO_MODEL_PATH", "checkpoints/yolov8_bestm.pt"))
     florence_base_model: str = field(default_factory=lambda: os.getenv("FLORENCE_BASE_MODEL", "microsoft/Florence-2-base"))
     florence_adapter_path: str = field(default_factory=lambda: os.getenv("FLORENCE_ADAPTER_PATH", "checkpoints/florence"))
     omnipasser_email: str = field(default_factory=lambda: os.getenv("OMNIPASSER_EMAIL", ""))
     omnipasser_password: str = field(default_factory=lambda: os.getenv("OMNIPASSER_PASSWORD", ""))
+
+    # Planner backend selection: "hf" (ViT5) or "gemini"
+    planner_backend: str = field(default_factory=lambda: os.getenv("AGENT_PLANNER_BACKEND", "hf"))
+    gemini_models: str = field(default_factory=lambda: os.getenv("GEMINI_MODELS", ""))  # comma-separated
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
     
     # Chrome Profile settings
     use_chrome_profile: bool = field(default_factory=lambda: _env_bool("USE_CHROME_PROFILE", False))
@@ -83,4 +90,3 @@ class Settings:
 settings = Settings()
 
 __all__ = ["Settings", "settings"]
-

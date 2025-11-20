@@ -36,3 +36,6 @@ data/raw/intents/
 models/
 model_weights/
 temp/
+
+# Allow task files
+!scripts/data_collection/tasks/*.jsonl
