@@ -1,1 +1,39 @@
-﻿Hướng dẫn Controller: mô tả action chi tiết với selector và lý do.
+Hướng dẫn annotate Controller (chọn action cụ thể)
+=================================================
+Nhiệm vụ: chọn đúng 1 action trong danh sách available_actions_flat để tiến hành bước kế tiếp. Giữ JSON sạch, không giải thích lan man.
+
+Đầu vào bạn nhận được
+- goal_summary: tóm tắt mục tiêu (40-120 ký tự).
+- current_plan_step: bước Planner đã chọn (type + description + constraints).
+- page_state: page_type, dom_state (filters/products/cart/checkout), vision_state nếu có.
+- available_actions_flat: danh sách action DSL (id, type, description, dom_selector/vision_ref nếu có).
+- last_action_result: {success, error}.
+- short_history: vài hành động trước đó.
+
+Đầu ra cần trả về
+```
+{
+  "chosen_action": {
+    "action_id": "<phải lấy từ available_actions_flat hoặc đề xuất rõ ràng nếu buộc phải fallback>",
+    "type": "CLICK | FILL | NAVIGATE | PRESS | SELECT_DROPDOWN | WAIT_FOR | CLICK_AT",
+    "text": "<chỉ điền khi type=FILL hoặc cần truyền text>",
+    "reason": "Giải thích ngắn gọn tại sao action giúp tiến gần plan step"
+  },
+  "reason": "Lặp lại/nhấn mạnh lý do (có thể giống trên)"
+}
+```
+
+Quy tắc chọn action
+- Ưu tiên action phù hợp current_plan_step: 
+  - SEARCH/APPLY_FILTER → FILL ô tìm kiếm/giá hoặc CLICK nút áp dụng.
+  - SELECT_PRODUCT → CLICK sản phẩm/hình ảnh có giá/nhãn phù hợp.
+  - GO_TO_CART/CHECKOUT → CLICK nút giỏ hàng/checkout.
+- Nếu goal/constraints có max_price → ưu tiên action liên quan đến giá; nếu phải nhập giá thì text = số tiền (vd 500000).
+- Nếu must_official_store → ưu tiên action chứa “mall/chính hãng/official”.
+- Không lặp lại action vừa thất bại (last_action_result.success == False) trừ khi có chỉnh sửa khác (text khác).
+- Chỉ dùng CLICK_AT khi không có selector/action khả dụng.
+- Tuyệt đối không click nút “Đặt hàng/Pay” nếu plan_step chưa là REVIEW_ORDER và chưa có xác nhận user.
+
+Ví dụ ngắn
+- Goal summary: “áo khoác nam <500k”, plan_step=APPLY_FILTER, actions có INPUT_MAX_PRICE & APPLY_FILTERS → chosen_action = INPUT_MAX_PRICE (FILL, text="500000"), reason “cần đặt trần giá trước khi lọc”.
+- Goal summary: “thanh toán đơn hiện có”, page_type=cart, actions có GO_TO_CHECKOUT_BUTTON → chọn CLICK vào GO_TO_CHECKOUT_BUTTON, reason “đưa user sang form thanh toán”.

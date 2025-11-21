@@ -1,1 +1,43 @@
-﻿Hướng dẫn ghi chú Planner: mô tả next_plan_step bằng tiếng Việt.
+Hướng dẫn annotate Planner (next_plan_step)
+===========================================
+Nhiệm vụ: chọn bước kế tiếp ở mức cao cho tác vụ mua sắm web. Đầu ra phải là JSON đúng schema, không kèm giải thích ngoài.
+
+Đầu vào bạn nhận được
+- goal: yêu cầu gốc của người dùng (tiếng Việt).
+- high_level_state: page_type hiện tại, trạng thái bộ lọc (có ô giá, shop Mall…), bước tiến độ gần nhất.
+- history_summary: 2-3 hành động gần nhất (để tránh lặp lại).
+
+Đầu ra cần trả về
+```
+{
+  "plan_version": 1,
+  "overall_strategy": "... mô tả ngắn gọn cách tiếp cận",
+  "next_plan_step": {
+    "step_id": "<one_of_steps_below>",
+    "type": "<trùng step_id>",
+    "description": "1 câu hành động rõ ràng",
+    "constraints": { "max_price": ..., "must_official_store": true|false, ... }
+  }
+}
+```
+
+Danh sách step_id hợp lệ
+- SEARCH_PRODUCT: nhập/tìm kiếm sản phẩm theo goal.
+- APPLY_FILTER: áp dụng bộ lọc (giá, Mall/chính hãng, danh mục).
+- SELECT_PRODUCT: mở/nhấp sản phẩm phù hợp từ danh sách.
+- GO_TO_CART: đi tới giỏ hàng để kiểm tra sản phẩm đã chọn.
+- GO_TO_CHECKOUT: chuyển từ giỏ sang trang thanh toán.
+- FILL_CHECKOUT_INFO: điền thông tin nhận hàng/thanh toán (nhưng chưa bấm “Đặt hàng/Pay”).
+- REVIEW_ORDER: rà soát lại giá/địa chỉ và chờ xác nhận người dùng trước bước thanh toán.
+- TERMINATE: chỉ dùng khi goal đã thỏa mãn hoặc không thể tiến xa hơn.
+
+Quy tắc ghi nhãn
+- Ưu tiên bước tiếp theo khả thi dựa trên page_type hiện tại (vd: đang ở cart thì GO_TO_CHECKOUT), không nhảy cóc.
+- Nếu goal có “dưới/<=/tối đa …k/triệu” -> điền max_price trong constraints.
+- Nếu goal có “chính hãng/Mall/official” -> constraints.must_official_store = true và ưu tiên APPLY_FILTER/SELECT_PRODUCT ở shop chính hãng.
+- Không lặp lại bước đã làm ngay trước đó nếu history_summary đã chứa (trừ khi cần thử lại).
+- Không sinh nhiều bước; chỉ duy nhất next_plan_step.
+
+Ví dụ ngắn
+- Goal: “Mua áo khoác nam dưới 500k trên Shopee”, page_type=search_page → step SEARCH_PRODUCT, description “Nhập từ khóa áo khoác nam và tìm kiếm”, constraints.max_price=500000.
+- Goal: “Thanh toán đơn hàng đang có”, page_type=cart → step GO_TO_CHECKOUT, description “Mở trang thanh toán để xem phí và địa chỉ”.
