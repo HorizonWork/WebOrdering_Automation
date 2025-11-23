@@ -42,10 +42,10 @@ async def test_with_settings():
         # Get or create page
         if manager.pages:
             page = manager.pages[0]
-            print(f"✅ Using existing page ({len(manager.pages)} page(s) available)\n")
+            print(f"yes Using existing page ({len(manager.pages)} page(s) available)\n")
         else:
             page = await manager.new_page()
-            print("✅ Created new page\n")
+            print("yes Created new page\n")
         
         # Navigate to test page
         print("📄 Navigating to Shopee...\n")
@@ -53,7 +53,7 @@ async def test_with_settings():
         await manager.wait_for_load(page)
         
         title = await page.title()
-        print(f"✓ Page Title: {title}")
+        print(f"yes Page Title: {title}")
         
         # Check login status (if using profile)
         if settings.use_chrome_profile:
@@ -62,7 +62,7 @@ async def test_with_settings():
                 user_element = await page.query_selector('[class*="navbar__username"]')
                 if user_element:
                     username = await user_element.inner_text()
-                    print(f"✓ Logged in as: {username}")
+                    print(f"yes Logged in as: {username}")
                 else:
                     print("ℹ Not logged in")
             except Exception:
@@ -71,16 +71,16 @@ async def test_with_settings():
         print("\n⏳ Keeping browser open for 5 seconds...")
         await asyncio.sleep(5)
         
-        print("\n✅ Test completed successfully!")
+        print("\nyes Test completed successfully!")
         
     except RuntimeError as e:
-        print(f"\n❌ Error: {e}\n")
+        print(f"\nno Error: {e}\n")
         if "already in use" in str(e):
             print("💡 Close all Chrome windows and try again\n")
         return False
         
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}\n")
+        print(f"\nno Unexpected error: {e}\n")
         import traceback
         traceback.print_exc()
         return False
@@ -88,7 +88,7 @@ async def test_with_settings():
     finally:
         print("\n🔒 Closing browser...")
         await manager.close()
-        print("✅ Browser closed\n")
+        print("yes Browser closed\n")
     
     print("=" * 70)
     return True

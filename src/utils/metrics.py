@@ -237,4 +237,4 @@ if __name__ == "__main__":
     # Get report
     print("\n" + tracker.get_report())
     
-    print("✅ MetricsTracker test completed!")
+    print("yes MetricsTracker test completed!")

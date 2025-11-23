@@ -120,7 +120,7 @@ class PerceptionEmbedding:
         # Batch encode
         embeddings = self.encoder.encode_text(descriptions)
         
-        logger.info(f"✓ Encoded {len(elements)} UI elements")
+        logger.info(f"yes Encoded {len(elements)} UI elements")
         
         return embeddings
     
@@ -208,7 +208,7 @@ if __name__ == "__main__":
         attributes={'placeholder': 'Tìm kiếm sản phẩm'}
     )
     
-    print(f"✓ Encoded input element")
+    print(f"yes Encoded input element")
     print(f"  Shape: {emb.shape}")
     print(f"  First 10 dims: {emb[0, :10]}\n")
     
@@ -223,7 +223,7 @@ if __name__ == "__main__":
     ]
     
     embeddings = embedding.encode_element_batch(elements)
-    print(f"✓ Encoded {len(elements)} elements")
+    print(f"yes Encoded {len(elements)} elements")
     print(f"  Shape: {embeddings.shape}\n")
     
     # Test 3: Find matching
@@ -243,5 +243,5 @@ if __name__ == "__main__":
         print(f"   Score: {score:.4f}\n")
     
     print("=" * 70)
-    print("✅ All Tests Completed!")
+    print("yes All Tests Completed!")
     print("=" * 70)

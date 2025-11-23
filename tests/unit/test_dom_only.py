@@ -25,7 +25,7 @@ async def test_dom_distiller():
         # Navigate to Lazada
         print("\n📍 Navigating to Lazada...")
         await page.goto("https://www.lazada.vn", timeout=30000)
-        print(f"✅ Page loaded: {page.url}")
+        print(f"yes Page loaded: {page.url}")
 
         # Get raw DOM
         raw_dom = await page.content()
@@ -47,10 +47,10 @@ async def test_dom_distiller():
             assert "<script>" not in distilled, "Scripts should be removed"
             assert "<style>" not in distilled, "Styles should be removed"
 
-        print("\n✅ DOM Distiller test PASSED!")
+        print("\nyes DOM Distiller test PASSED!")
 
     except Exception as e:
-        print(f"\n❌ FAILED: {e}")
+        print(f"\nno FAILED: {e}")
         import traceback
 
         traceback.print_exc()

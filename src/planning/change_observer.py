@@ -117,7 +117,7 @@ class ChangeObserver:
         try:
             await page.evaluate(observer_script)
             self.observer_injected = True
-            logger.info("✓ MutationObserver injected successfully")
+            logger.info("yes MutationObserver injected successfully")
         except Exception as e:
             logger.error(f"Failed to inject observer: {e}")
     
@@ -313,20 +313,20 @@ async def test_change_observer():
     try:
         # Create page
         page = await manager.new_page()
-        print("✓ Page created\n")
+        print("yes Page created\n")
         
         # Navigate to test page
         await page.goto("https://example.com")
         await asyncio.sleep(2)
-        print("✓ Navigated to example.com\n")
+        print("yes Navigated to example.com\n")
         
         # Inject observer
         await observer.inject_observer(page)
-        print("✓ Observer injected\n")
+        print("yes Observer injected\n")
         
         # Start observing
         await observer.start_observing(page)
-        print("✓ Started observing\n")
+        print("yes Started observing\n")
         
         # Simulate action: click a link
         print("🔄 Performing action: clicking link...")
@@ -338,7 +338,7 @@ async def test_change_observer():
         # Get changes
         print("📊 Collecting changes...")
         changes = await observer.get_changes(page, wait_ms=1500)
-        print(f"✓ Collected {len(changes)} changes\n")
+        print(f"yes Collected {len(changes)} changes\n")
         
         # Analyze changes
         print("=" * 70)
@@ -348,11 +348,11 @@ async def test_change_observer():
         
         # Check success
         success = observer.did_action_succeed('any')
-        print(f"\n✅ Action succeeded: {success}")
+        print(f"\nyes Action succeeded: {success}")
         
     finally:
         await manager.close()
-        print("\n✓ Cleanup complete")
+        print("\nyes Cleanup complete")
 
 
 if __name__ == "__main__":

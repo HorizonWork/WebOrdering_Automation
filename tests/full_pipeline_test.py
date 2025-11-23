@@ -68,7 +68,7 @@ async def test_full_pipeline():
             phobert_checkpoint=args.phobert_model,
             vit5_checkpoint=args.vit5_model,
         )
-        print("✅ Agent initialized\n")
+        print("yes Agent initialized\n")
     except Exception as e:
         logger.error(f"Failed to initialize agent: {e}")
         return
@@ -119,22 +119,22 @@ async def test_full_pipeline():
         # Return success
         print("\n" + "=" * 70)
         if result.success:
-            print("✅ Pipeline test PASSED!")
+            print("yes Pipeline test PASSED!")
         else:
-            print("❌ Pipeline test FAILED (but no crash)")
+            print("no Pipeline test FAILED (but no crash)")
         print("=" * 70)
         
     except KeyboardInterrupt:
         print("\n⚠️  Test interrupted by user")
     except Exception as e:
-        print(f"\n❌ Test failed with error: {e}")
+        print(f"\nno Test failed with error: {e}")
         logger.error(f"Pipeline error: {e}", exc_info=True)
     
     finally:
         # Cleanup
         print("\n🔒 Cleaning up...")
         await orchestrator.close()
-        print("✅ Done")
+        print("yes Done")
 
 
 if __name__ == "__main__":

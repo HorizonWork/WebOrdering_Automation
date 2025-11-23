@@ -281,7 +281,7 @@ def main():
     write_jsonl(sft_val,   out / "sft_val.jsonl")
     write_jsonl(sft_test,  out / "sft_test.jsonl")
 
-    print("\n✓ Prepared:")
+    print("\nyes Prepared:")
     print(f"  intents_*  → {out}")
     print(f"  sft_*      → {out}")
 

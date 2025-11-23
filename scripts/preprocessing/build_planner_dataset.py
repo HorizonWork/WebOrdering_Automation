@@ -19,18 +19,73 @@ placeholder "TODO" strings).
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Add project root to path
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+
 import argparse
 import json
 import random
 import re
-from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
-DEFAULT_SYNTHETIC_DIR = Path("data/raw/misc/synthetic_episodes")
+from src.utils.logger import get_logger
+from config.definitions import (
+    PlannerInput, PlannerOutput, 
+    ControllerInput, ControllerOutput,
+    AVAILABLE_HIGH_LEVEL_ACTIONS, ACTION_TYPES
+)
+
+logger = get_logger(__name__)
+
+DEFAULT_SYNTHETIC_DIR = "data/synthetic_episodes"
 
 # ------------------------------------------------------------------------------
 # Data loading utilities
 # ------------------------------------------------------------------------------
+
+def parse_dom_text(dom_text: str) -> Dict[str, Any]:
+    """
+    Parse compact dom_text back into a pseudo dom_state.
+    Format: [id] <tag> text (attrs)
+    """
+    elements = []
+    if not dom_text:
+        return {"elements": []}
+        
+    for line in dom_text.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Regex to parse: [id] <tag> text (attrs)
+        # This is a rough parser, sufficient for feature extraction
+        match = re.match(r'\[(.*?)\] <(.*?)> (.*)', line)
+        if match:
+            el_id, tag, rest = match.groups()
+            
+            # Extract attrs if present at the end in parens
+            attrs = {}
+            text = rest
+            attr_match = re.search(r'\((.*?)\)$', rest)
+            if attr_match:
+                attr_str = attr_match.group(1)
+                text = rest[:attr_match.start()].strip()
+                
+                # Parse simple attrs like name='value'
+                for pair in re.findall(r"(\w+)='([^']*)'", attr_str):
+                    attrs[pair[0]] = pair[1]
+            
+            elements.append({
+                "id": el_id,
+                "tag": tag,
+                "text": text,
+                "attributes": attrs
+            })
+            
+    return {"elements": elements}
 
 
 def load_episodes(episodes_dir: Path, max_episodes: int | None = None) -> List[Dict[str, Any]]:
@@ -152,12 +207,16 @@ def heuristic_current_step(page_type: str) -> str:
         return "SEARCH"
     if "listing" in page_type_l:
         return "PRODUCT_LISTING"
-    if "product" in page_type_l:
+    if "product" in page_type_l or "detail" in page_type_l:
         return "PRODUCT_SELECTED"
     if "cart" in page_type_l:
         return "IN_CART"
     if "checkout" in page_type_l or "payment" in page_type_l:
         return "CHECKOUT"
+    if "login" in page_type_l:
+        return "LOGIN"
+    if "general" in page_type_l or "unknown" in page_type_l:
+        return "SEARCH"
     return "UNKNOWN"
 
 
@@ -189,6 +248,7 @@ def build_available_actions_flat_from_filters(dom_state: Dict[str, Any]) -> List
                 "description": label or f"Tác vụ {aid}",
                 "dom_selector": None,
                 "vision_ref": None,
+                "params": {},
             }
 
     return list(actions.values())
@@ -209,13 +269,15 @@ def derive_actions_from_page_state(page_state: Dict[str, Any], goal_text: str) -
                 "type": "FILL",
                 "description": "Nhập truy vấn tìm kiếm",
                 "text": goal_text[:80],
+                "params": {"text": goal_text[:80]},
             }
         )
         actions.append(
             {
                 "id": "SUBMIT_SEARCH",
-                "type": "PRESS",
+                "type": "CLICK",
                 "description": "Gửi truy vấn (Enter/nút search)",
+                "params": {},
             }
         )
 
@@ -225,6 +287,7 @@ def derive_actions_from_page_state(page_state: Dict[str, Any], goal_text: str) -
                 "id": "SELECT_TOP_RESULT",
                 "type": "CLICK",
                 "description": "Mở sản phẩm đầu tiên phù hợp",
+                "params": {},
             }
         )
 
@@ -234,6 +297,7 @@ def derive_actions_from_page_state(page_state: Dict[str, Any], goal_text: str) -
                 "id": "ADD_TO_CART",
                 "type": "CLICK",
                 "description": "Thêm sản phẩm vào giỏ",
+                "params": {},
             }
         )
 
@@ -243,6 +307,7 @@ def derive_actions_from_page_state(page_state: Dict[str, Any], goal_text: str) -
                 "id": "GO_TO_CHECKOUT_BUTTON",
                 "type": "CLICK",
                 "description": "Chuyển sang trang thanh toán",
+                "params": {},
             }
         )
 
@@ -250,8 +315,9 @@ def derive_actions_from_page_state(page_state: Dict[str, Any], goal_text: str) -
         actions.append(
             {
                 "id": "REVIEW_ORDER_SECTION",
-                "type": "WAIT_FOR",
+                "type": "WAIT",
                 "description": "Kiểm tra lại địa chỉ/tổng tiền",
+                "params": {"duration": 2000},
             }
         )
 
@@ -437,7 +503,12 @@ def choose_controller_action(
         reason = "Không có gợi ý cụ thể; chọn action khả dụng đầu tiên để tiến thêm bước."
         return fallback, reason
 
-    return {"action_id": "NO_ACTION", "type": "WAIT", "description": "Không có action khả dụng"}, "Không tìm thấy action khả dụng."
+    return {
+        "id": "special:wait",
+        "type": "WAIT",
+        "description": "Không có action khả dụng, chờ...",
+        "params": {"duration": 1000}
+    }, "Không tìm thấy action khả dụng."
 
 
 # ------------------------------------------------------------------------------
@@ -450,7 +521,15 @@ def build_planner_sample(ep: Dict[str, Any], step: Dict[str, Any], steps: List[D
     goal_text = ep.get("goal", "")
     page_state = step.get("page_state") or {}
     dom_state = page_state.get("dom_state") or {}
-    page_type = page_state.get("page_type", "unknown")
+    
+    # Support for compact format
+    if not dom_state.get("elements") and step.get("dom_text"):
+        dom_state = parse_dom_text(step.get("dom_text"))
+        
+    # Infer page type if missing
+    page_type = page_state.get("page_type")
+    if not page_type or page_type == "unknown":
+        page_type = infer_page_type_from_dom(step.get("dom_text", ""))
     has_price, has_official = infer_high_level_filters(dom_state)
     constraints = extract_goal_constraints(goal_text)
 
@@ -492,18 +571,41 @@ def build_planner_sample(ep: Dict[str, Any], step: Dict[str, Any], steps: List[D
             "next_plan_step": teacher_next,
         }
     else:
+        # Check if step has 'thought' or 'reason' from LLM annotation
+        existing_thought = step.get("thought") or step.get("reason") or step.get("action", {}).get("reason")
+        existing_desc = step.get("description")
+        
         planner_output = infer_next_plan_step(goal_text, page_state, has_price, has_official)
-
-    planner_output_placeholder = planner_output  # Kept for backward compatibility field
+        
+        if existing_thought:
+             planner_output["next_plan_step"]["reasoning"] = existing_thought
+        if existing_desc:
+             planner_output["next_plan_step"]["description"] = existing_desc
 
     return {
         "episode_id": ep.get("episode_id"),
         "step": step.get("step"),
         "planner_input": planner_input,
         "planner_output": planner_output,
-        "planner_output_placeholder": planner_output_placeholder,
     }
 
+
+def infer_page_type_from_dom(dom_text: str) -> str:
+    """Heuristic to guess page type from DOM text."""
+    if not dom_text:
+        return "unknown"
+    dt = dom_text.lower()
+    if "giỏ hàng" in dt or "cart" in dt:
+        return "cart"
+    if "thanh toán" in dt or "checkout" in dt:
+        return "checkout"
+    if "kết quả tìm kiếm" in dt or "search result" in dt:
+        return "search_results"
+    if "chi tiết sản phẩm" in dt or "product detail" in dt or "mua ngay" in dt:
+        return "product_detail"
+    if "đăng nhập" in dt or "login" in dt:
+        return "login"
+    return "general"
 
 def build_controller_sample(ep: Dict[str, Any], step: Dict[str, Any], steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Create one ControllerInput + ControllerOutput sample."""
@@ -511,8 +613,19 @@ def build_controller_sample(ep: Dict[str, Any], step: Dict[str, Any], steps: Lis
     goal_summary = goal_text[:120]
 
     page_state_full = step.get("page_state") or {}
-    page_type = page_state_full.get("page_type", "unknown")
     dom_state = page_state_full.get("dom_state") or {}
+    
+    # Support for compact format
+    dom_text = step.get("dom_text", "")
+    if not dom_state.get("elements") and dom_text:
+        dom_state = parse_dom_text(dom_text)
+        
+    # Infer page type if missing
+    page_type = page_state_full.get("page_type")
+    if not page_type or page_type == "unknown":
+        page_type = infer_page_type_from_dom(dom_text)
+        page_state_full["page_type"] = page_type # Update the dict so downstream functions see it
+        
     vision_state = page_state_full.get("vision_state") or {}
 
     has_price, has_official = infer_high_level_filters(dom_state)
@@ -554,28 +667,80 @@ def build_controller_sample(ep: Dict[str, Any], step: Dict[str, Any], steps: Lis
     }
 
     _, controller_labels = extract_teacher_labels(step)
-    chosen = controller_labels.get("chosen_action") if isinstance(controller_labels, dict) else None
+    _, teacher_action = extract_teacher_labels(step)
+    
+    # Check for existing thought/reason from LLM annotation
+    existing_thought = step.get("thought") or step.get("reason") or step.get("action", {}).get("reason")
 
-    if isinstance(chosen, dict):
-        controller_output = {
-            "chosen_action": chosen,
-            "reason": controller_labels.get("reason", chosen.get("reason", "")),
-        }
+    if teacher_action:
+        chosen_action = teacher_action
+        reason = "Teacher forced action."
     else:
-        chosen_action, reason = choose_controller_action(goal_summary, page_state_full, all_actions, constraints)
-        controller_output = {
-            "chosen_action": chosen_action,
-            "reason": reason,
-        }
+        # Use recorded action if available
+        recorded_action = step.get("action", {})
+        skill = recorded_action.get("skill")
+        
+        if skill and skill not in ("human_action", "unknown"):
+            params = recorded_action.get("params") or {}
+            selector = (
+                params.get("selector")
+                or params.get("element")
+                or params.get("id")
+                or recorded_action.get("selector")
+            )
+            
+            # Use a stable id that is not the selector
+            action_id = f"action:{skill}"
+            description = skill
+            
+            # Special handling for IDs and Descriptions
+            if skill == "request_help":
+                action_id = "special:request_help"
+                description = f"Request help: {params.get('reason', 'unknown')}"
+            elif skill == "scroll":
+                action_id = "special:scroll"
+                description = f"Scroll to ({params.get('x', 0)}, {params.get('y', 0)})"
+            elif skill == "wait":
+                action_id = "special:wait"
+                duration = params.get("duration", 0)
+                description = f"Wait for {duration}s"
+            elif skill == "fill" or skill == "type":
+                text = params.get("text") or params.get("value") or ""
+                description = f"Type '{text}' into {selector or 'field'}"
+            elif skill == "click":
+                description = f"Click on {selector or 'target'}"
 
-    controller_output_placeholder = controller_output  # kept for consistency
+            chosen_action = {
+                "type": skill.upper(),
+                "id": action_id,
+                "description": description,
+                "params": params,
+            }
+            if skill in ("fill", "type"):
+                chosen_action["text"] = params.get("text") or params.get("value") or ""
+            
+            reason = existing_thought or description or "Thực hiện hành động đã ghi lại."
+            # Avoid mismatch: if skill=CLICK but reasoning talks about typing, fall back to description
+            if skill == "click" and any(k in (reason or "").lower() for k in ["nhập", "gõ", "type", "fill", "input"]):
+                reason = description
+            if skill in ("fill", "type") and selector and selector not in description:
+                description = f"{description} ({selector})"
+        else:
+            # Fallback to heuristic
+            chosen_action, reason = choose_controller_action(goal_summary, page_state_full, all_actions, constraints)
+            if existing_thought:
+                reason = existing_thought
+
+    controller_output = {
+        "chosen_action": chosen_action,
+        "reason": reason,
+    }
 
     return {
         "episode_id": ep.get("episode_id"),
         "step": step.get("step"),
         "controller_input": controller_input,
         "controller_output": controller_output,
-        "controller_output_placeholder": controller_output_placeholder,
     }
 
 
@@ -685,7 +850,7 @@ def main(default_dataset: str = "both") -> None:
         steps_subset = steps if args.max_steps_per_episode <= 0 else steps[: args.max_steps_per_episode]
 
         for s in steps_subset:
-            if not s.get("page_state"):
+            if not s.get("page_state") and not s.get("dom_text"):
                 continue
             planner_rows.append(build_planner_sample(ep, s, steps))
             controller_rows.append(build_controller_sample(ep, s, steps))

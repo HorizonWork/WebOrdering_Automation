@@ -123,7 +123,7 @@ class PlannerAgent:
         
         self.current_plan = plan
         
-        logger.info(f"✓ Generated plan with {len(steps)} steps")
+        logger.info(f"yes Generated plan with {len(steps)} steps")
         for i, step in enumerate(steps, 1):
             logger.info(f"  {i}. {step}")
         
@@ -218,7 +218,7 @@ Bước này đã hoàn thành chưa? Trả lời 'có' hoặc 'chưa':"""
         completed = 'có' in response.lower() or 'hoàn thành' in response.lower()
         
         if completed:
-            logger.info(f"✅ Step completed: {current_step}")
+            logger.info(f"yes Step completed: {current_step}")
         
         return completed
     
@@ -282,7 +282,7 @@ Bước này đã hoàn thành chưa? Trả lời 'có' hoặc 'chưa':"""
         
         new_plan = self.generate_plan(self.current_plan.query, context)
         
-        logger.info("✓ Generated adjusted plan")
+        logger.info("yes Generated adjusted plan")
         return new_plan
     
     def track_execution(
@@ -432,5 +432,5 @@ if __name__ == "__main__":
         print("\nNot enough data for estimate")
     
     print("\n" + "=" * 70)
-    print("✅ All Tests Completed!")
+    print("yes All Tests Completed!")
     print("=" * 70)

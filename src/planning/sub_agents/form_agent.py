@@ -78,7 +78,7 @@ class FormAgent(BaseSubAgent):
         ]
         
         if any(kw in task_desc for kw in form_keywords):
-            logger.info("✓ Form task detected from description")
+            logger.info("yes Form task detected from description")
             return True
         
         # Check for form elements
@@ -87,7 +87,7 @@ class FormAgent(BaseSubAgent):
         has_inputs = dom.count('input') >= 2
         
         if has_form and has_inputs:
-            logger.info("✓ Form detected in DOM")
+            logger.info("yes Form detected in DOM")
             return True
         
         return False
@@ -127,7 +127,7 @@ class FormAgent(BaseSubAgent):
             # Step 1: Detect form fields
             logger.info("🔍 Detecting form fields...")
             fields = await self._detect_form_fields(page)
-            logger.info(f"✓ Found {len(fields)} form fields")
+            logger.info(f"yes Found {len(fields)} form fields")
             
             # Step 2: Fill fields
             logger.info("📝 Filling form fields...")
@@ -141,13 +141,13 @@ class FormAgent(BaseSubAgent):
                     success = await self._fill_field(page, field, field_value)
                     if success:
                         filled_count += 1
-                        logger.info(f"   ✓ Filled: {field_name}")
+                        logger.info(f"   yes Filled: {field_name}")
                     else:
-                        logger.warning(f"   ✗ Failed: {field_name}")
+                        logger.warning(f"   no Failed: {field_name}")
                 else:
                     logger.warning(f"   ? Field not found: {field_name}")
             
-            logger.info(f"✓ Filled {filled_count}/{len(form_data)} fields")
+            logger.info(f"yes Filled {filled_count}/{len(form_data)} fields")
             
             # Step 3: Submit form (if requested)
             if should_submit:
@@ -180,7 +180,7 @@ class FormAgent(BaseSubAgent):
             }
             
         except Exception as e:
-            logger.error(f"❌ Form filling failed: {e}")
+            logger.error(f"no Form filling failed: {e}")
             self._record_failure()
             return {
                 'success': False,
@@ -308,7 +308,7 @@ class FormAgent(BaseSubAgent):
                 element = await page.query_selector(selector)
                 if element and await element.is_visible():
                     await element.click()
-                    logger.info(f"✓ Clicked submit button: {selector}")
+                    logger.info(f"yes Clicked submit button: {selector}")
                     return True
             except:
                 continue
@@ -359,10 +359,10 @@ async def test_form_agent():
     observation = {'dom': '<form><input name="email"/><input type="submit"/></form>'}
     
     can_handle = await agent.can_handle(task, observation)
-    print(f"✓ Can handle form task: {can_handle}")
+    print(f"yes Can handle form task: {can_handle}")
     
     print(f"\n📊 Stats: {agent.get_stats()}")
-    print("\n✅ Form agent ready")
+    print("\nyes Form agent ready")
 
 
 if __name__ == "__main__":

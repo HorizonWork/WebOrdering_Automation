@@ -156,18 +156,18 @@ class NavigatorAgent:
             result = await self.execute_with_observation(page, action, expect_change)
             
             if result.success:
-                logger.info(f"✅ Action succeeded on attempt {attempt}")
+                logger.info(f"yes Action succeeded on attempt {attempt}")
                 return result
             
             last_result = result
-            logger.warning(f"❌ Attempt {attempt} failed: {result.error}")
+            logger.warning(f"no Attempt {attempt} failed: {result.error}")
             
             # Wait before retry
             if attempt < self.max_retries:
                 import asyncio
                 await asyncio.sleep(1)
         
-        logger.error(f"❌ All {self.max_retries} attempts failed")
+        logger.error(f"no All {self.max_retries} attempts failed")
         return last_result
     
     async def navigate_to(
@@ -318,7 +318,7 @@ async def test_navigator_agent():
     try:
         # Create page
         page = await manager.new_page()
-        print("✓ Page created\n")
+        print("yes Page created\n")
         
         # Test 1: Navigate
         print("🔄 Test 1: Navigate to URL")
@@ -337,11 +337,11 @@ async def test_navigator_agent():
         for i, url in enumerate(navigator.get_navigation_history(), 1):
             print(f"   {i}. {url}")
         
-        print("\n✅ Tests completed!")
+        print("\nyes Tests completed!")
         
     finally:
         await manager.close()
-        print("\n✓ Cleanup complete")
+        print("\nyes Cleanup complete")
 
 
 if __name__ == "__main__":

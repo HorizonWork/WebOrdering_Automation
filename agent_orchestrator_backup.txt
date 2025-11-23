@@ -218,7 +218,7 @@ class AgentOrchestrator:
                 self.state_manager.update_state(observation)
                 
                 # LAYER 2: PLANNING - Decide next action
-                thought, action = await self.react_engine.step(
+                thought, action, step_observation = await self.react_engine.step(
                     query=query,
                     observation=observation,
                     available_skills=self.skill_executor.get_available_skills()
@@ -244,7 +244,7 @@ class AgentOrchestrator:
                     step_num=step,
                     thought=thought,
                     action=action,
-                    observation=observation,
+                    observation=step_observation,
                     result=result
                 )
                 

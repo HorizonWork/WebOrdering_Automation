@@ -75,7 +75,7 @@ class VectorStore:
             else:
                 self.index = faiss.IndexFlatL2(self.dimension)
             
-            logger.info("✓ FAISS index created")
+            logger.info("yes FAISS index created")
             
         except Exception as e:
             logger.error(f"Failed to create FAISS index: {e}")
@@ -243,11 +243,11 @@ if __name__ == "__main__":
         emb = np.random.randn(768)
         store.add(emb, {'id': i, 'text': f'Example {i}'})
     
-    print(f"✓ Added 5 embeddings")
+    print(f"yes Added 5 embeddings")
     
     # Search
     query = np.random.randn(768)
     results = store.search(query, top_k=3)
-    print(f"✓ Search returned {len(results)} results")
+    print(f"yes Search returned {len(results)} results")
     
-    print("✅ VectorStore test passed!")
+    print("yes VectorStore test passed!")

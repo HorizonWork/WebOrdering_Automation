@@ -177,8 +177,8 @@ if __name__ == "__main__":
     
     for text in test_texts:
         has_vn = processor.contains_vietnamese(text)
-        print(f"{text}: {'✓ Vietnamese' if has_vn else '✗ Not Vietnamese'}")
+        print(f"{text}: {'yes Vietnamese' if has_vn else 'no Not Vietnamese'}")
     
     print("\n" + "=" * 70)
-    print("✅ VietnameseProcessor test completed!")
+    print("yes VietnameseProcessor test completed!")
     print("=" * 70)

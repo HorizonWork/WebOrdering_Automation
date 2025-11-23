@@ -102,7 +102,7 @@ class RAILMemory:
                 }
             )
             
-            logger.info(f"✓ Added successful experience: '{query[:50]}...'")
+            logger.info(f"yes Added successful experience: '{query[:50]}...'")
     
     def retrieve_similar_examples(
         self,
@@ -263,14 +263,14 @@ if __name__ == "__main__":
     
     # Retrieve similar
     examples = rail.retrieve_similar_examples("Tìm áo sơ mi", top_k=2)
-    print(f"✓ Retrieved {len(examples)} examples")
+    print(f"yes Retrieved {len(examples)} examples")
     
     # Format context
     context = rail.format_few_shot_context("Tìm áo sơ mi", examples)
-    print(f"✓ Context length: {len(context)} chars")
+    print(f"yes Context length: {len(context)} chars")
     
     # Stats
     stats = rail.get_statistics()
-    print(f"✓ Stats: {stats}")
+    print(f"yes Stats: {stats}")
     
-    print("✅ RAILMemory test passed!")
+    print("yes RAILMemory test passed!")

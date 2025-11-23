@@ -29,6 +29,7 @@ from src.perception.vision_enhancer import VisionEnhancer  # noqa: E402
 from src.perception.ui_detector import UIDetector  # noqa: E402
 from src.planning.react_engine import ReActEngine  # noqa: E402
 from src.planning.rule_policy import RulePolicy  # noqa: E402
+from src.utils.js_recorder import JS_EVENT_RECORDER  # noqa: E402
 from src.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
@@ -356,7 +357,7 @@ class AgentOrchestrator:
             self.state_manager.update_state(observation)
 
             # LAYER 2: PLANNING - Decide next action
-            thought, action = await self.react_engine.step(
+            thought, action, step_observation = await self.react_engine.step(
                 query=query,
                 observation=observation,
                 available_skills=self.skill_executor.get_available_skills(),
@@ -390,7 +391,7 @@ class AgentOrchestrator:
                 step_num=step,
                 thought=thought,
                 action=action,
-                observation=observation,
+                observation=step_observation,
                 result=result,
             )
 
@@ -432,6 +433,7 @@ class AgentOrchestrator:
         rule_policy = RulePolicy()
 
         last_action: Optional[Dict] = None
+        consecutive_failures = 0
 
         for step_idx in range(1, self.max_steps + 1):
             logger.info("\n%s", "=" * 70)
@@ -491,6 +493,11 @@ class AgentOrchestrator:
             )
 
             last_action = action
+            bailout = rule_policy.handle_result(action, result)
+            if bailout:
+                last_action = bailout
+                logger.info("Bailing out after repeated failures: %s", bailout)
+                break
 
             # Simple termination conditions
             page_type = page_state.get("page_type", "generic")
@@ -522,6 +529,8 @@ class AgentOrchestrator:
         logger.info("Starting HUMAN TELEOPERATION mode.")
         logger.info("1. Interact with the browser window manually.")
         logger.info("2. Return to this terminal and press Enter to record the step.")
+        logger.info("   - Type 'wait [sec]' to record a wait action.")
+        logger.info("   - Type 'help' or 'captcha' to record a request for help.")
         logger.info("3. Type 'q' or 'quit' to finish the episode.")
         
         step = 0
@@ -531,34 +540,142 @@ class AgentOrchestrator:
         observation = await self._perceive(page)
         self.state_manager.update_state(observation)
 
+        # Inject Recorder
+        try:
+            await page.add_init_script(JS_EVENT_RECORDER)
+            await page.evaluate(JS_EVENT_RECORDER)
+        except Exception as e:
+            logger.warning(f"Failed to inject JS recorder: {e}")
+
         while True:
             step += 1
             print(f"\n--- Step {step} ---")
+            
+            # Re-inject if needed (e.g. after navigation)
+            try:
+                await page.evaluate(JS_EVENT_RECORDER)
+            except Exception:
+                pass
+
             user_input = await asyncio.get_event_loop().run_in_executor(
-                None, input, "Press Enter to record step (or type 'q' to finish): "
+                None, input, "Perform action in browser, then press Enter here (or 'q' to quit): "
             )
             
             if user_input.lower() in ("q", "quit", "exit"):
                 logger.info("User requested to finish task.")
+                confirm = await asyncio.get_event_loop().run_in_executor(
+                    None, input, "Mark task as SUCCESS? (y/n): "
+                )
+                if confirm.lower().startswith('y'):
+                    return {"skill": "complete"}
                 break
+            
+            # Retrieve recorded events
+            recorded_events = []
+            try:
+                recorded_events = await page.evaluate("window.getRecordedEvents()")
+            except Exception as e:
+                logger.warning(f"Failed to get recorded events: {e}")
+
+            # Determine action from events
+            action = {
+                "skill": "human_action",
+                "params": {
+                    "description": "human_action",
+                    "raw_input": user_input
+                }
+            }
+
+            # Manual overrides via CLI
+            if user_input.lower().startswith("wait"):
+                # Format: wait [seconds]
+                parts = user_input.split()
+                duration = 1.0
+                if len(parts) > 1 and parts[1].isdigit():
+                    duration = float(parts[1])
+                action = {
+                    "skill": "wait",
+                    "params": {"duration": duration}
+                }
+            elif user_input.lower() in ("help", "captcha"):
+                action = {
+                    "skill": "request_help",
+                    "params": {"reason": "captcha_or_difficulty"}
+                }
+            elif recorded_events:
+                # Heuristic: take the most meaningful event
+                # Priority: change > click > scroll
                 
+                chosen_event = None
+                
+                # 1. Look for 'change' (highest priority)
+                for evt in reversed(recorded_events):
+                    if evt.get("type") == "change":
+                        chosen_event = evt
+                        break
+                
+                # 2. If no change, look for 'click'
+                if not chosen_event:
+                    for evt in reversed(recorded_events):
+                        if evt.get("type") == "click":
+                            chosen_event = evt
+                            break
+                            
+                # 3. If no click, look for 'scroll' (but ignore 0,0 unless it's the only thing)
+                if not chosen_event:
+                    for evt in reversed(recorded_events):
+                        if evt.get("type") == "scroll":
+                            # Ignore scroll 0,0 if we have other events (noise check)
+                            # But if it's the ONLY event, we might keep it (though 0,0 is usually useless)
+                            if evt.get("scrollX", 0) == 0 and evt.get("scrollY", 0) == 0:
+                                continue
+                            chosen_event = evt
+                            break
+                            
+                # 4. Fallback to last event if nothing selected yet
+                if not chosen_event and recorded_events:
+                    chosen_event = recorded_events[-1]
+
+                evt_type = chosen_event.get("type")
+                selector = chosen_event.get("selector")
+                
+                if evt_type == "click":
+                    action = {
+                        "skill": "click",
+                        "params": {"selector": selector}
+                    }
+                elif evt_type == "change":
+                    val = chosen_event.get("value", "")
+                    # If it's a select tag, use 'select' skill
+                    if chosen_event.get("tagName") == "select":
+                        action = {
+                            "skill": "select",
+                            "params": {"selector": selector, "value": val}
+                        }
+                    else:
+                        # Default to fill for inputs/textareas
+                        action = {
+                            "skill": "fill",
+                            "params": {"selector": selector, "text": val}
+                        }
+                elif evt_type == "scroll":
+                    # Scroll action
+                    # We can record absolute position or just "scroll"
+                    # For now, let's use a generic scroll skill if available, or just record params
+                    action = {
+                        "skill": "scroll",
+                        "params": {
+                            "x": chosen_event.get("scrollX", 0),
+                            "y": chosen_event.get("scrollY", 0)
+                        }
+                    }
+                
+                logger.info(f"Auto-detected action from JS: {action}")
+
             # Capture state AFTER user interaction
             logger.info("Capturing state...")
             observation = await self._perceive(page)
             self.state_manager.update_state(observation)
-            
-            # Ask for action description (optional)
-            action_desc = "human_action"
-            # We could ask for more details here if needed, e.g.:
-            # action_desc = input("Describe action (default: human_action): ") or "human_action"
-
-            action = {
-                "skill": "human_action",
-                "params": {
-                    "description": action_desc,
-                    "raw_input": user_input
-                }
-            }
             
             result = {
                 "status": "success",
@@ -577,8 +694,6 @@ class AgentOrchestrator:
             logger.info("Step %d recorded.", step)
 
         return last_action
-
-        return action
 
     def _build_page_state_for_rules(
         self,
@@ -637,10 +752,11 @@ class AgentOrchestrator:
 
         # HTML & DOM distillation
         html = await self.browser_manager.get_html(page)
-        dom_distilled = self.dom_distiller.distill(html, mode="text_only")
+        annotated_html = self.dom_distiller.annotate_with_ids(html, prefix="mmid")
+        dom_distilled = self.dom_distiller.distill(annotated_html, mode="text_only")
 
-        # Interactive elements
-        elements = self.dom_distiller.extract_interactive_elements(html)
+        # Interactive elements (ids aligned with annotated DOM)
+        elements = self.dom_distiller.extract_interactive_elements(annotated_html)
 
         # Screenshot (raw bytes, primarily for logging / debug)
         screenshot = await self.browser_manager.screenshot(page)

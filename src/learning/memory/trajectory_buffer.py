@@ -216,10 +216,10 @@ if __name__ == "__main__":
     
     # Get stats
     stats = buffer.get_statistics()
-    print(f"✓ Stats: {stats}")
+    print(f"yes Stats: {stats}")
     
     # Get successful
     successful = buffer.get_successful_trajectories()
-    print(f"✓ Successful: {len(successful)}")
+    print(f"yes Successful: {len(successful)}")
     
-    print("✅ TrajectoryBuffer test passed!")
+    print("yes TrajectoryBuffer test passed!")

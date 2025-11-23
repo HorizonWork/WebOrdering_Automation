@@ -21,11 +21,11 @@ def test_imports():
     try:
         print("Importing BrowserManager...")
         from src.execution.browser_manager import BrowserManager
-        print("✅ BrowserManager imported")
+        print("yes BrowserManager imported")
         
         print("Importing SkillExecutor...")
         from src.execution.skill_executor import SkillExecutor
-        print("✅ SkillExecutor imported")
+        print("yes SkillExecutor imported")
         
         print("Importing Skills...")
         from src.execution.skills import (
@@ -35,13 +35,13 @@ def test_imports():
             ValidationSkills,
             WaitSkills
         )
-        print("✅ All Skills imported")
+        print("yes All Skills imported")
         
-        print("\n✅ TEST 1 PASSED: All imports successful\n")
+        print("\nyes TEST 1 PASSED: All imports successful\n")
         return True, (BrowserManager, SkillExecutor)
         
     except Exception as e:
-        print(f"\n❌ TEST 1 FAILED: {e}\n")
+        print(f"\nno TEST 1 FAILED: {e}\n")
         import traceback
         traceback.print_exc()
         return False, None
@@ -57,29 +57,29 @@ async def test_browser_manager(BrowserManager):
     try:
         print("Creating BrowserManager...")
         manager = BrowserManager(headless=False, use_chrome_profile=False)
-        print("✅ BrowserManager created")
+        print("yes BrowserManager created")
         
         print("Launching browser...")
         await manager.launch()
-        print("✅ Browser launched")
+        print("yes Browser launched")
         
         print("Creating page...")
         page = await manager.new_page()
-        print("✅ Page created")
+        print("yes Page created")
         
         print("Navigating to example.com...")
         await page.goto("https://example.com", timeout=30000)
-        print(f"✅ Navigation successful: {page.url}")
+        print(f"yes Navigation successful: {page.url}")
         
         print("Getting page title...")
         title = await page.title()
-        print(f"✅ Page title: {title}")
+        print(f"yes Page title: {title}")
         
-        print("\n✅ TEST 2 PASSED: BrowserManager works\n")
+        print("\nyes TEST 2 PASSED: BrowserManager works\n")
         return True, manager, page
         
     except Exception as e:
-        print(f"\n❌ TEST 2 FAILED: {e}\n")
+        print(f"\nno TEST 2 FAILED: {e}\n")
         import traceback
         traceback.print_exc()
         
@@ -98,7 +98,7 @@ async def test_skill_executor(SkillExecutor, page):
     try:
         print("Creating SkillExecutor...")
         executor = SkillExecutor()
-        print("✅ SkillExecutor created")
+        print("yes SkillExecutor created")
         
         print(f"Available skills: {len(executor.get_available_skills())}")
         print(f"Skills: {', '.join(executor.get_available_skills()[:10])}...")
@@ -108,7 +108,7 @@ async def test_skill_executor(SkillExecutor, page):
             page,
             {"skill": "goto", "params": {"url": "https://google.com"}}
         )
-        print(f"✅ goto result: {result}")
+        print(f"yes goto result: {result}")
         
         await asyncio.sleep(2)
         print(f"Current URL: {page.url}")
@@ -118,20 +118,20 @@ async def test_skill_executor(SkillExecutor, page):
             page,
             {"skill": "get_url", "params": {}}
         )
-        print(f"✅ get_url result: {result}")
+        print(f"yes get_url result: {result}")
         
         print("\nTesting 'get_title' skill...")
         result = await executor.execute(
             page,
             {"skill": "get_title", "params": {}}
         )
-        print(f"✅ get_title result: {result}")
+        print(f"yes get_title result: {result}")
         
-        print("\n✅ TEST 3 PASSED: SkillExecutor works\n")
+        print("\nyes TEST 3 PASSED: SkillExecutor works\n")
         return True
         
     except Exception as e:
-        print(f"\n❌ TEST 3 FAILED: {e}\n")
+        print(f"\nno TEST 3 FAILED: {e}\n")
         import traceback
         traceback.print_exc()
         return False
@@ -157,22 +157,22 @@ async def test_interaction_skills(executor, page):
             page,
             {"skill": "wait_for_selector", "params": {"selector": "textarea[name='q']"}}
         )
-        print(f"✅ wait_for_selector result: {result}")
+        print(f"yes wait_for_selector result: {result}")
         
         print("Testing 'type' skill...")
         result = await executor.execute(
             page,
             {"skill": "type", "params": {"selector": "textarea[name='q']", "text": "playwright"}}
         )
-        print(f"✅ type result: {result}")
+        print(f"yes type result: {result}")
         
         await asyncio.sleep(1)
         
-        print("\n✅ TEST 4 PASSED: Interaction skills work\n")
+        print("\nyes TEST 4 PASSED: Interaction skills work\n")
         return True
         
     except Exception as e:
-        print(f"\n❌ TEST 4 FAILED: {e}\n")
+        print(f"\nno TEST 4 FAILED: {e}\n")
         import traceback
         traceback.print_exc()
         return False
@@ -187,7 +187,7 @@ async def main():
     # Test 1: Imports
     success, components = test_imports()
     if not success:
-        print("\n❌ ABORTED: Cannot import components\n")
+        print("\nno ABORTED: Cannot import components\n")
         return False
     
     BrowserManager, SkillExecutor = components
@@ -195,14 +195,14 @@ async def main():
     # Test 2: BrowserManager
     success, manager, page = await test_browser_manager(BrowserManager)
     if not success:
-        print("\n❌ ABORTED: BrowserManager not working\n")
+        print("\nno ABORTED: BrowserManager not working\n")
         return False
     
     try:
         # Test 3: SkillExecutor
         success = await test_skill_executor(SkillExecutor, page)
         if not success:
-            print("\n❌ SkillExecutor has issues\n")
+            print("\nno SkillExecutor has issues\n")
             return False
         
         # Test 4: Interaction Skills
@@ -213,13 +213,13 @@ async def main():
         
         # Final summary
         print("=" * 70)
-        print("🎉 EXECUTION LAYER VALIDATION COMPLETE")
+        print("celebration EXECUTION LAYER VALIDATION COMPLETE")
         print("=" * 70)
         print("\n📊 Summary:")
-        print("  ✅ Imports: Working")
-        print("  ✅ BrowserManager: Working")
-        print("  ✅ SkillExecutor: Working")
-        print(f"  {'✅' if success else '⚠️ '} Interaction Skills: {'Working' if success else 'Partial'}")
+        print("  yes Imports: Working")
+        print("  yes BrowserManager: Working")
+        print("  yes SkillExecutor: Working")
+        print(f"  {'yes' if success else '⚠️ '} Interaction Skills: {'Working' if success else 'Partial'}")
         print("\n💡 Next Steps:")
         print("  1. Run full test suite: python tests/unit/test_execution_suite.py")
         print("  2. Test with real workflows")
@@ -232,7 +232,7 @@ async def main():
         print("\n🔒 Cleanup...")
         if manager:
             await manager.close()
-        print("✅ Done\n")
+        print("yes Done\n")
 
 
 if __name__ == "__main__":

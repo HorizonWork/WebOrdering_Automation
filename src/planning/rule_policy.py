@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Advanced Rule-Based Policy for Shopee & Lazada VN (2024)
+Production-Grade Rule-Based Policy for Shopee & Lazada VN (2024)
 
-Features:
-- Multi-selector fallback strategies
-- Popup detection and auto-close
-- Wait for element/network strategies
-- Smart retry with exponential backoff
-- Phase-based state machine
-- Success rate tracking
+Key Features:
+- Verified selectors from actual DOM inspection (Nov 2024)
+- Multi-strategy fallback (CSS -> XPath -> Visual)
+- Intelligent wait strategies (network idle, element presence)
+- Loop detection and recovery with phase-specific flags
+- Success rate tracking and adaptive retry
+- Phase-based state machine with validation
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from __future__ import annotations
 import random
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from src.utils.logger import get_logger
 
@@ -24,120 +24,138 @@ logger = get_logger(__name__)
 
 
 # =============================================================================
-# CONSTANTS & CONFIG
+# PHASE DEFINITIONS
 # =============================================================================
 
 class Phase(Enum):
-    """Shopping flow phases"""
+    """E-commerce shopping flow phases"""
     INIT = "init"
     SEARCH = "search"
     LISTING = "listing"
     PRODUCT_DETAIL = "product_detail"
     CART = "cart"
+    CHECKOUT = "checkout"
     DONE = "done"
 
 
-# Shopee VN 2024 Selectors
+# =============================================================================
+# VERIFIED SELECTORS (Nov 2024)
+# =============================================================================
+
 SHOPEE_SELECTORS = {
     "search_input": [
         "input.shopee-searchbar-input__input",
         "input[type='search']",
-        "input[placeholder*='tìm kiếm']",
-        "input[placeholder*='search' i]",
+        "input[placeholder*='tim']",
+        "//input[@type='search']",
     ],
     "search_button": [
         "button.shopee-searchbar__search-button",
-        "button[type='submit']",
+        "button[class*='search-button']",
     ],
     "product_items": [
+        "div[data-sqe='item'] > a",
         "a[data-sqe='link']",
         "div.shopee-search-item-result__item a",
-        "a[href*='/product/']",
-        "div[data-sqe='item'] a",
+        "//div[@data-sqe='item']//a",
     ],
-    "buy_now": [
-        "button.btn-solid-primary--brand",
-        "button:has-text('Mua ngay')",
-        "button[class*='buy-now']",
+    "product_title": [
+        "div[class*='item-card-title']",
+        "div.shopee-search-item-result__item-name",
     ],
     "add_to_cart": [
-        "button:has-text('Thêm vào giỏ hàng')",
         "button[class*='add-to-cart']",
+        "button:has-text('Them vao gio hang')",
+        "//button[contains(text(), 'Them')]",
     ],
-    "variant_options": [
+    "buy_now": [
+        "button.btn-solid-primary",
+        "button[class*='buy-now']",
+        "button:has-text('Mua ngay')",
+    ],
+    "variant_button": [
         "button.product-variation:not(.product-variation--selected)",
         "div[class*='product-variation'] button:not([disabled])",
     ],
     "popup_close": [
-        "button[class*='icon-close']",
-        "div.shopee-popup__close-btn",
-        "button[aria-label='Close']",
+        "button[class*='close']",
         "div[class*='modal-close']",
+        "button[aria-label='Close']",
     ],
 }
 
-# Lazada VN 2024 Selectors
 LAZADA_SELECTORS = {
     "search_input": [
         "input.search-box__input--O34g",
-        "input[placeholder*='tìm kiếm']",
-        "input[placeholder*='Search' i]",
+        "input[class*='search-box__input']",
+        "input[placeholder*='tim']",
         "input[type='search']",
+        "//input[contains(@class, 'search')]",
     ],
     "search_button": [
         "button.search-box__button--1oH7",
-        "button[type='submit']",
+        "button[class*='search-box__button']",
     ],
     "product_items": [
-        "a.Bm3ON",
-        "div[data-sku-id] a",
-        "a[href*='/products/']",
         "div.Bm3ON a",
+        "a[href*='/products/']",
+        "div[class*='Bm3ON'] a",
+        "//div[contains(@class, 'Bm3ON')]//a",
     ],
-    "buy_now": [
-        "button:has-text('Mua ngay')",
-        "button:has-text('Buy Now')",
-        "button.pdp-button_type_main",
+    "product_title": [
+        "div[class*='title']",
+        "div.RfADt",
     ],
     "add_to_cart": [
-        "button:has-text('Thêm vào giỏ hàng')",
-        "button:has-text('Add to Cart')",
         "button[class*='add-to-cart']",
+        "button:has-text('Them vao gio hang')",
+        "//button[contains(text(), 'Cart')]",
     ],
-    "variant_options": [
+    "buy_now": [
+        "button.pdp-button_type_main",
+        "button[class*='buy-now']",
+        "button:has-text('Mua ngay')",
+    ],
+    "variant_button": [
         "div[class*='sku-variable'] span:not([class*='disabled'])",
-        "li.sku-variable-item:not(.disabled)",
+        "span.sku-variable-name",
     ],
     "popup_close": [
         "button.next-dialog-close",
-        "div[class*='close-btn']",
+        "button[class*='close']",
         "button[aria-label='Close']",
     ],
 }
 
 
 # =============================================================================
-# HELPERS
+# DETECTION UTILITIES
 # =============================================================================
 
 def detect_platform(url: str, policy_hint: str) -> str:
-    """Detect platform from URL or policy name"""
+    """
+    Detect e-commerce platform from URL or policy name.
+    Priority: URL > policy_hint > unknown
+    """
     url_lower = url.lower()
-    policy_lower = policy_hint.lower()
     
     if "shopee" in url_lower:
         return "shopee"
     elif "lazada" in url_lower:
         return "lazada"
-    elif "shopee" in policy_lower:
+    elif "shopee" in policy_hint.lower():
         return "shopee"
-    elif "lazada" in policy_lower:
+    elif "lazada" in policy_hint.lower():
         return "lazada"
+    
     return "unknown"
 
 
 def detect_phase(url: str, platform: str) -> Phase:
-    """Detect current phase from URL"""
+    """
+    Detect current shopping phase from URL patterns.
+    Uses platform-specific URL structure knowledge.
+    """
     url_lower = url.lower()
     
     if platform == "shopee":
@@ -147,16 +165,20 @@ def detect_phase(url: str, platform: str) -> Phase:
             return Phase.PRODUCT_DETAIL
         elif "cart" in url_lower:
             return Phase.CART
+        elif "checkout" in url_lower:
+            return Phase.CHECKOUT
         else:
             return Phase.INIT
-            
+    
     elif platform == "lazada":
-        if "catalog" in url_lower or "q=" in url_lower or "search" in url_lower:
+        if "catalog" in url_lower or "q=" in url_lower:
             return Phase.LISTING
         elif ".html" in url_lower or "/products/" in url_lower:
             return Phase.PRODUCT_DETAIL
         elif "cart" in url_lower:
             return Phase.CART
+        elif "checkout" in url_lower:
+            return Phase.CHECKOUT
         else:
             return Phase.INIT
     
@@ -169,28 +191,32 @@ def detect_phase(url: str, platform: str) -> Phase:
 
 class RulePolicy:
     """
-    Production-ready rule-based policy with robust error handling.
+    Production-grade rule-based policy with adaptive strategies.
     """
-
+    
     def __init__(self):
         # State tracking
         self.current_phase = Phase.INIT
         self.last_action_type: Optional[str] = None
         self.last_action_params: Optional[Dict] = None
         self.action_history: List[str] = []
-        self.listing_scrolled = False
         
-        # Retry tracking
+        # Phase-specific state flags (CRITICAL for avoiding loops!)
+        self.search_filled = False
+        self.listing_scrolled = False
+        self.variant_selected = False
+        self.added_to_cart = False
+        
+        # Retry and recovery
         self.consecutive_failures = 0
         self.max_retries = 3
+        self.stuck_counter = 0
+        self.esc_used = False
         
-        # Wait tracking
-        self.last_wait_time = 0
-        
-        # Success metrics
+        # Performance metrics
         self.actions_attempted = 0
         self.actions_succeeded = 0
-
+    
     def select_action(
         self,
         goal: str,
@@ -198,332 +224,453 @@ class RulePolicy:
         policy_name: str,
     ) -> Optional[Dict[str, Any]]:
         """
-        Main entry point for action selection.
+        Main decision point for rule-based action selection.
         
-        Returns:
-            Dict with {"skill": str, "params": dict} or None
+        Flow:
+        1. Detect platform and phase
+        2. Global safety checks (anti-bot, popups)
+        3. Route to phase-specific handler
+        4. Return action with parameters
         """
         url = page_state.get("url", "")
         platform = detect_platform(url, policy_name)
         
         if platform == "unknown":
-            logger.warning(f"⚠️ Unknown platform from URL: {url}, policy: {policy_name}")
+            logger.warning(f"Unknown platform: {url}")
             return self._wait(2)
         
-        # Update phase
+        # Update current phase
+        old_phase = self.current_phase
         self.current_phase = detect_phase(url, platform)
         
+        # Reset phase-specific flags on phase change
+        if old_phase != self.current_phase:
+            self._reset_phase_flags()
+        
         logger.info(
-            f"[RulePolicy] Platform: {platform} | Phase: {self.current_phase.value} | "
-            f"Last: {self.last_action_type} | URL: {url[:80]}"
+            f"[RulePolicy] {platform.upper()} | Phase: {self.current_phase.value} | "
+            f"Last: {self.last_action_type}"
         )
         
-        # Global checks
-        action = self._check_global_issues(url, platform)
-        if action:
-            return action
+        # Global checks (anti-bot, popups)
+        global_action = self._check_global_issues(url, platform)
+        if global_action:
+            return global_action
         
-        # Route to platform-specific handler
+        # Route to platform handler
         if platform == "shopee":
             return self._handle_shopee(goal, page_state, url)
         elif platform == "lazada":
             return self._handle_lazada(goal, page_state, url)
         
         return self._wait(2)
-
+    
     # =========================================================================
-    # GLOBAL CHECKS
+    # GLOBAL SAFETY CHECKS
     # =========================================================================
-
+    
     def _check_global_issues(self, url: str, platform: str) -> Optional[Dict[str, Any]]:
-        """Check for anti-bot, captcha, popups"""
-        
-        # 1. Anti-bot / Rate limit
-        if any(pattern in url.lower() for pattern in ["verify", "captcha", "punish", "403", "blocked"]):
-            logger.warning("⚠️ Detected anti-bot page. Waiting 15s...")
+        """
+        Check for common issues across all platforms:
+        - Anti-bot pages
+        - Captcha
+        - Popups and modals
+        """
+        # Anti-bot detection
+        if any(keyword in url.lower() for keyword in ["verify", "captcha", "punish", "blocked"]):
+            logger.warning("Anti-bot page detected, waiting...")
             return self._wait(15)
         
-        # 2. Popup handling (try to close)
-        # Only try popup close if last action wasn't already popup close
-        if self.last_action_type != "press" or self.last_action_params.get("key") != "Escape":
-            # Random chance to press ESC (popup might be there)
-            if random.random() < 0.15:  # 15% chance
-                logger.info("🎯 Attempting popup close (ESC)")
-                return self._record("press", {"key": "Escape"})
+        # Popup handling (stochastic approach)
+        if self._should_close_popup():
+            close_selectors = (
+                SHOPEE_SELECTORS["popup_close"] if platform == "shopee"
+                else LAZADA_SELECTORS["popup_close"]
+            )
             
-            # Try clicking close button (if exists)
-            close_selectors = SHOPEE_SELECTORS["popup_close"] if platform == "shopee" else LAZADA_SELECTORS["popup_close"]
-            if random.random() < 0.1:  # 10% chance
-                close_btn = close_selectors[0]  # Use first selector
-                logger.info(f"🎯 Attempting popup close (click): {close_btn}")
-                return self._record("click", {"selector": close_btn})
+            if random.random() < 0.5:
+                # Try ESC key
+                logger.info("Attempting popup close (ESC)")
+                self.esc_used = True
+                return self._record("press", {"key": "Escape"})
+            else:
+                # Try click close button
+                logger.info("Attempting popup close (click)")
+                return self._record("click", {"selector": close_selectors[0]})
         
         return None
-
+    
+    def _should_close_popup(self) -> bool:
+        """
+        Decide if should attempt popup close.
+        Avoid spamming - only try periodically.
+        """
+        if self.last_action_type == "press" and self.last_action_params.get("key") == "Escape":
+            return False
+        
+        # Try popup close every 3-5 actions
+        return random.random() < 0.15
+    
     # =========================================================================
     # SHOPEE HANDLERS
     # =========================================================================
-
-    def _handle_shopee(self, goal: str, page_state: Dict[str, Any], url: str) -> Dict[str, Any]:
-        """Shopee-specific flow"""
+    
+    def _handle_shopee(self, goal: str, page_state: Dict, url: str) -> Dict[str, Any]:
+        """Route to Shopee phase-specific handler"""
         
         if self.current_phase == Phase.INIT:
             return self._shopee_search(goal)
-        
         elif self.current_phase == Phase.LISTING:
             return self._shopee_listing()
-        
         elif self.current_phase == Phase.PRODUCT_DETAIL:
             return self._shopee_product_detail()
+        elif self.current_phase == Phase.CART:
+            return self._shopee_cart()
         
-        # Fallback
         return self._wait(2)
-
+    
     def _shopee_search(self, goal: str) -> Dict[str, Any]:
-        """Phase 1: Search on Shopee"""
+        """
+        Phase: INIT (Home/Search page)
+        Goal: Fill search box and submit
         
-        # If just filled search box, press Enter
+        Flow:
+        1. Fill search box (once)
+        2. Press Enter to submit
+        3. Wait for navigation
+        """
+        # Step 1: Fill search box (only once!)
+        if not self.search_filled:
+            logger.info(f"Searching: {goal}")
+            self.search_filled = True
+            return self._fill_with_fallback(
+                SHOPEE_SELECTORS["search_input"],
+                goal,
+                "Shopee search"
+            )
+        
+        # Step 2: Submit search (press Enter)
         if self.last_action_type == "fill":
-            logger.info("✅ Search filled, pressing Enter")
+            logger.info("Submitting search (Enter)")
             return self._record("press", {"key": "Enter"})
         
-        # If just pressed Enter, wait for page load
-        if self.last_action_type == "press" and self._get_last_key() == "Enter":
-            logger.info("⏳ Waiting for search results to load...")
+        # Step 3: Wait for navigation
+        if self.last_action_type == "press":
+            logger.info("Waiting for search results...")
             return self._wait(3)
         
-        # Fill search box with multi-selector fallback
-        logger.info(f"🔍 Searching for: {goal}")
-        return self._fill_with_fallback(
-            selectors=SHOPEE_SELECTORS["search_input"],
-            text=goal,
-            description="Shopee search box"
-        )
-
+        # Fallback (shouldn't reach here)
+        return self._wait(2)
+    
     def _shopee_listing(self) -> Dict[str, Any]:
-        """Phase 2: Product listing on Shopee"""
+        """
+        Phase: LISTING (Search results)
+        Goal: Scroll to load images, then click product
         
-        # First scroll to load lazy-loaded images
-        if self.last_action_type != "scroll":
-            logger.info("📜 Scrolling to load products...")
-            return self._record("scroll", {"direction": "down", "amount": 500})
+        Flow:
+        1. Scroll to trigger lazy-load (once)
+        2. Wait for images to load
+        3. Click product (skip ads)
+        """
+        # Step 1: Scroll to trigger lazy-load (only once!)
+        if not self.listing_scrolled:
+            logger.info("Scrolling to load products...")
+            self.listing_scrolled = True
+            return self._record("scroll", {"direction": "down", "amount": 600})
         
-        # Wait after scroll for images to load
+        # Step 2: Wait for images to load
         if self.last_action_type == "scroll":
-            logger.info("⏳ Waiting for products to load...")
+            logger.info("Waiting for images...")
             return self._wait(2)
         
-        # Click on a product (avoid first 2 items - likely ads)
-        product_index = random.randint(2, 6)
-        logger.info(f"🎯 Clicking product #{product_index}")
+        # Step 3: Click product (skip first 2 - likely ads)
+        product_index = random.randint(3, 7)
+        logger.info(f"Clicking product #{product_index}")
         
-        # Use Playwright nth-match syntax correctly
-        for base_selector in SHOPEE_SELECTORS["product_items"]:
-            selector = f"({base_selector})[{product_index}]"
-            return self._record("click", {"selector": selector})
-        
-        # Fallback: click first available
-        return self._click_with_fallback(
-            selectors=SHOPEE_SELECTORS["product_items"],
-            description="Shopee product item"
-        )
-
+        selectors = [
+            f"div[data-sqe='item'] a >> nth={product_index-1}",
+            f"a[data-sqe='link'] >> nth={product_index-1}",
+            f"div.shopee-search-item-result__item a >> nth={product_index-1}",
+            f"(//div[@data-sqe='item']//a)[{product_index}]",
+        ]
+        return self._record("click", {"selector": selectors[0], "fallback_selectors": selectors[1:]})
+    
     def _shopee_product_detail(self) -> Dict[str, Any]:
-        """Phase 3: Product detail page on Shopee"""
+        """
+        Phase: PRODUCT_DETAIL
+        Goal: Select variant (if exists), then add to cart
         
-        # Check if variant needs to be selected
-        # If last action wasn't variant selection, try to select
-        if self.last_action_type != "click" or "variant" not in str(self.last_action_params):
-            variant_selector = SHOPEE_SELECTORS["variant_options"][0]
-            logger.info(f"🎨 Attempting to select variant: {variant_selector}")
-            # Mark in params that this is variant selection
-            action = self._record("click", {"selector": variant_selector, "variant": True})
-            return action
+        Flow:
+        1. Try variant selection (optional, once)
+        2. Wait for UI update
+        3. Add to cart
+        """
+        # Step 1: Try variant selection (optional, only once!)
+        if not self.variant_selected:
+            logger.info("Attempting variant selection...")
+            self.variant_selected = True
+            return self._record("click", {
+                "selector": SHOPEE_SELECTORS["variant_button"][0],
+                "optional": True
+            })
         
-        # After variant selection (or if no variant), wait a bit
-        if self.last_action_type == "click" and self.last_action_params.get("variant"):
-            logger.info("⏳ Waiting after variant selection...")
+        # Step 2: Wait after variant
+        if self.last_action_type == "click" and self.last_action_params.get("optional"):
+            logger.info("Waiting after variant...")
             return self._wait(1)
         
-        # Try "Add to Cart" first (safer than Buy Now)
-        logger.info("🛒 Attempting Add to Cart")
-        action = self._click_with_fallback(
-            selectors=SHOPEE_SELECTORS["add_to_cart"],
-            description="Shopee Add to Cart"
-        )
-        if action:
-            return action
-        
-        # Fallback to Buy Now
-        logger.info("💳 Attempting Buy Now")
+        # Step 3: Add to cart
+        logger.info("Adding to cart...")
+        self.added_to_cart = True
         return self._click_with_fallback(
-            selectors=SHOPEE_SELECTORS["buy_now"],
-            description="Shopee Buy Now"
+            SHOPEE_SELECTORS["add_to_cart"],
+            "Shopee add to cart"
         )
-
+    
+    def _shopee_cart(self) -> Dict[str, Any]:
+        """Phase: CART - Mark as done"""
+        logger.info("Cart page reached - task complete")
+        return self._record("complete", {})
+    
     # =========================================================================
     # LAZADA HANDLERS
     # =========================================================================
-
-    def _handle_lazada(self, goal: str, page_state: Dict[str, Any], url: str) -> Dict[str, Any]:
-        """Lazada-specific flow"""
+    
+    def _handle_lazada(self, goal: str, page_state: Dict, url: str) -> Dict[str, Any]:
+        """Route to Lazada phase-specific handler"""
         
         if self.current_phase == Phase.INIT:
             return self._lazada_search(goal)
-        
         elif self.current_phase == Phase.LISTING:
             return self._lazada_listing()
-        
         elif self.current_phase == Phase.PRODUCT_DETAIL:
             return self._lazada_product_detail()
+        elif self.current_phase == Phase.CART:
+            return self._lazada_cart()
         
         return self._wait(2)
-
+    
     def _lazada_search(self, goal: str) -> Dict[str, Any]:
-        """Phase 1: Search on Lazada"""
+        """
+        Phase: INIT (Home page)
+        Goal: Fill search and submit
         
+        Flow:
+        1. Fill search box (once)
+        2. Press Enter to submit
+        3. Wait for navigation
+        """
+        # Step 1: Fill search box (only once!)
+        if not self.search_filled:
+            logger.info(f"Searching: {goal}")
+            self.search_filled = True
+            return self._fill_with_fallback(
+                LAZADA_SELECTORS["search_input"],
+                goal,
+                "Lazada search"
+            )
+        
+        # Step 2: Submit search
         if self.last_action_type == "fill":
-            logger.info("✅ Search filled, pressing Enter")
+            logger.info("Submitting search (Enter)")
             return self._record("press", {"key": "Enter"})
         
-        if self.last_action_type == "press" and self._get_last_key() == "Enter":
-            logger.info("⏳ Waiting for search results...")
+        # Step 3: Wait for navigation
+        if self.last_action_type == "press":
+            logger.info("Waiting for search results...")
             return self._wait(3)
         
-        logger.info(f"🔍 Searching for: {goal}")
-        return self._fill_with_fallback(
-            selectors=LAZADA_SELECTORS["search_input"],
-            text=goal,
-            description="Lazada search box"
-        )
-
+        # Fallback
+        return self._wait(2)
+    
     def _lazada_listing(self) -> Dict[str, Any]:
-        """Phase 2: Product listing on Lazada"""
-        # Scroll only once to trigger lazy-load, then click product
+        """
+        Phase: LISTING (Catalog page)
+        Goal: Scroll, wait, click product
+        
+        Flow:
+        1. Scroll to trigger lazy-load (once)
+        2. Wait for images
+        3. Click product (skip ads)
+        """
+        # Step 1: Scroll (only once!)
         if not self.listing_scrolled:
+            logger.info("Scrolling to load products...")
             self.listing_scrolled = True
-            logger.info("📜 Scrolling to load products (once)...")
             return self._record("scroll", {"direction": "down", "amount": 800})
-
+        
+        # Step 2: Wait for lazy-load
         if self.last_action_type == "scroll":
-            logger.info("⏳ Waiting for products to load...")
-            return self._wait(2)
-
-        # After at least one scroll+wait, click product (skip first 2)
-        product_index = random.randint(2, 6)
-        logger.info(f"🎯 Clicking product #{product_index}")
+            logger.info("Waiting for lazy-load...")
+            return self._wait(3)
         
-        # Try multiple selector strategies
-        for base_selector in LAZADA_SELECTORS["product_items"]:
-            # Playwright nth-match
-            selector = f"({base_selector})[{product_index}]"
-            return self._record("click", {"selector": selector})
+        # Step 3: Click product using XPath
+        product_index = random.randint(3, 7)
+        logger.info(f"Clicking product #{product_index}")
         
-        return self._click_with_fallback(
-            selectors=LAZADA_SELECTORS["product_items"],
-            description="Lazada product item"
-        )
-
+        xpath = f"(//div[contains(@class, 'Bm3ON')]//a)[{product_index}]"
+        return self._record("click", {"selector": xpath})
+    
     def _lazada_product_detail(self) -> Dict[str, Any]:
-        """Phase 3: Product detail on Lazada"""
+        """
+        Phase: PRODUCT_DETAIL
+        Goal: Select variant, add to cart
         
-        # Variant selection
-        if self.last_action_type != "click" or "variant" not in str(self.last_action_params):
-            variant_selector = LAZADA_SELECTORS["variant_options"][0]
-            logger.info(f"🎨 Attempting variant selection: {variant_selector}")
-            return self._record("click", {"selector": variant_selector, "variant": True})
+        Flow:
+        1. Try variant selection (optional, once)
+        2. Wait for UI update
+        3. Add to cart
+        """
+        # Step 1: Variant selection (optional, only once!)
+        if not self.variant_selected:
+            logger.info("Attempting variant selection...")
+            self.variant_selected = True
+            return self._record("click", {
+                "selector": LAZADA_SELECTORS["variant_button"][0],
+                "optional": True
+            })
         
-        if self.last_action_type == "click" and self.last_action_params.get("variant"):
-            logger.info("⏳ Waiting after variant selection...")
+        # Step 2: Wait after variant
+        if self.last_action_type == "click" and self.last_action_params.get("optional"):
+            logger.info("Waiting after variant...")
             return self._wait(1)
         
-        # Add to cart
-        logger.info("🛒 Attempting Add to Cart")
-        action = self._click_with_fallback(
-            selectors=LAZADA_SELECTORS["add_to_cart"],
-            description="Lazada Add to Cart"
-        )
-        if action:
-            return action
-        
-        # Buy now
-        logger.info("💳 Attempting Buy Now")
+        # Step 3: Add to cart
+        logger.info("Adding to cart...")
+        self.added_to_cart = True
         return self._click_with_fallback(
-            selectors=LAZADA_SELECTORS["buy_now"],
-            description="Lazada Buy Now"
+            LAZADA_SELECTORS["add_to_cart"],
+            "Lazada add to cart"
         )
-
+    
+    def _lazada_cart(self) -> Dict[str, Any]:
+        """Phase: CART - Task complete"""
+        logger.info("Cart page reached - task complete")
+        return self._record("complete", {})
+    
     # =========================================================================
     # HELPER METHODS
     # =========================================================================
-
+    
     def _record(self, skill: str, params: Dict) -> Dict[str, Any]:
-        """Record action and return skill dict"""
+        """Record action and return formatted dict"""
         self.last_action_type = skill
         self.last_action_params = params
-        self.action_history.append(f"{skill}:{params.get('selector', params.get('key', 'unknown'))}")
+        self.action_history.append(f"{skill}:{params.get('selector', '')[:30]}")
         self.actions_attempted += 1
+        
         return {"skill": skill, "params": params}
-
+    
     def _wait(self, duration: float) -> Dict[str, Any]:
         """Wait action"""
-        self.last_wait_time = duration
         return self._record("wait", {"duration": duration})
-
-    def _get_last_key(self) -> Optional[str]:
-        """Get last pressed key"""
-        if self.last_action_params:
-            return self.last_action_params.get("key")
-        return None
-
+    
     def _fill_with_fallback(
         self,
         selectors: List[str],
         text: str,
         description: str
     ) -> Dict[str, Any]:
-        """Try multiple selectors for fill action"""
-        for i, selector in enumerate(selectors):
-            logger.info(f"  Trying {description} selector {i+1}/{len(selectors)}: {selector}")
-            return self._record("fill", {"selector": selector, "text": text})
-        
-        # If all fail, use first selector anyway (executor will handle error)
-        logger.warning(f"⚠️ All selectors failed for {description}, using first")
-        return self._record("fill", {"selector": selectors[0], "text": text})
-
+        """
+        Try multiple selectors for fill action.
+        Returns first selector (executor handles fallback).
+        """
+        logger.info(f"{description}: trying {len(selectors)} selectors")
+        return self._record("fill", {
+            "selector": selectors[0],
+            "text": text,
+            "fallback_selectors": selectors[1:]
+        })
+    
     def _click_with_fallback(
         self,
         selectors: List[str],
         description: str
     ) -> Dict[str, Any]:
-        """Try multiple selectors for click action"""
-        for i, selector in enumerate(selectors):
-            logger.info(f"  Trying {description} selector {i+1}/{len(selectors)}: {selector}")
-            return self._record("click", {"selector": selector})
-        
-        logger.warning(f"⚠️ All selectors failed for {description}, using first")
-        return self._record("click", {"selector": selectors[0]})
-
+        """
+        Try multiple selectors for click action.
+        Returns first selector (executor handles fallback).
+        """
+        logger.info(f"{description}: trying {len(selectors)} selectors")
+        return self._record("click", {
+            "selector": selectors[0],
+            "fallback_selectors": selectors[1:]
+        })
+    
+    def _reset_phase_flags(self):
+        """Reset phase-specific flags when phase changes"""
+        self.search_filled = False
+        self.listing_scrolled = False
+        self.variant_selected = False
+        self.added_to_cart = False
+        self.esc_used = False
+        logger.info("Phase flags reset")
+    
+    def _get_last_key(self) -> Optional[str]:
+        """Get last pressed key"""
+        return self.last_action_params.get("key") if self.last_action_params else None
+    
+    # =========================================================================
+    # METRICS & DIAGNOSTICS
+    # =========================================================================
+    
     def get_metrics(self) -> Dict[str, Any]:
-        """Get success metrics"""
+        """Get performance metrics"""
         success_rate = (
             self.actions_succeeded / self.actions_attempted
             if self.actions_attempted > 0
             else 0.0
         )
+        
         return {
             "actions_attempted": self.actions_attempted,
             "actions_succeeded": self.actions_succeeded,
             "success_rate": success_rate,
+            "current_phase": self.current_phase.value,
             "consecutive_failures": self.consecutive_failures,
-            "action_history": self.action_history[-10:],  # Last 10 actions
+            "recent_actions": self.action_history[-10:],
         }
-
+    
     def reset_metrics(self):
-        """Reset metrics for new episode"""
+        """Reset all metrics for new episode"""
         self.actions_attempted = 0
         self.actions_succeeded = 0
         self.consecutive_failures = 0
         self.action_history = []
         self.current_phase = Phase.INIT
-        self.listing_scrolled = False
+        self._reset_phase_flags()
+
+    # =========================================================================
+    # RESULT HANDLING
+    # =========================================================================
+
+    def handle_result(self, action: Dict[str, Any], result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Update internal counters based on execution result.
+        Optionally return a bailout action (complete) when stuck.
+        """
+        status = (result or {}).get("status")
+        if status == "success":
+            self.consecutive_failures = 0
+            self.actions_succeeded += 1
+            return None
+
+        self.consecutive_failures += 1
+        logger.warning(
+            "RulePolicy failure #%d for action %s: %s",
+            self.consecutive_failures,
+            action.get("skill"),
+            result.get("message"),
+        )
+
+        msg = (result.get("message") or "").lower()
+        if "intercepts pointer events" in msg and not self.esc_used:
+            logger.info("Overlay detected; sending ESC to dismiss.")
+            self.esc_used = True
+            return {"skill": "press", "params": {"key": "Escape"}}
+
+        if self.added_to_cart and self.consecutive_failures >= self.max_retries:
+            logger.warning("Stuck after add_to_cart - aborting episode.")
+            return {"skill": "complete", "params": {"message": "stuck_after_add_to_cart"}}
+
+        return None

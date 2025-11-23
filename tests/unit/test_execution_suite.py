@@ -43,18 +43,18 @@ class ExecutionTestSuite:
         self.page = await self.manager.new_page()
         self.executor = SkillExecutor()
         
-        print("✅ Test environment ready\n")
+        print("yes Test environment ready\n")
     
     async def teardown(self):
         """Cleanup after tests"""
         print("\n🔒 Cleaning up...")
         if self.manager:
             await self.manager.close()
-        print("✅ Cleanup complete\n")
+        print("yes Cleanup complete\n")
     
     def log_result(self, test_name: str, passed: bool, message: str = ""):
         """Log test result"""
-        status = "✅ PASS" if passed else "❌ FAIL"
+        status = "yes PASS" if passed else "no FAIL"
         self.results.append((test_name, passed, message))
         print(f"{status} - {test_name}")
         if message:
@@ -354,15 +354,15 @@ class ExecutionTestSuite:
         failed = total - passed
         
         print(f"\nTotal Tests: {total}")
-        print(f"✅ Passed: {passed}")
-        print(f"❌ Failed: {failed}")
+        print(f"yes Passed: {passed}")
+        print(f"no Failed: {failed}")
         print(f"Success Rate: {(passed/total*100):.1f}%\n")
         
         if failed > 0:
             print("Failed Tests:")
             for name, passed, message in self.results:
                 if not passed:
-                    print(f"  ❌ {name}")
+                    print(f"  no {name}")
                     if message:
                         print(f"     {message}")
         
@@ -393,7 +393,7 @@ class ExecutionTestSuite:
             return all_passed
             
         except Exception as e:
-            print(f"\n❌ Test suite failed with error: {e}")
+            print(f"\nno Test suite failed with error: {e}")
             import traceback
             traceback.print_exc()
             return False

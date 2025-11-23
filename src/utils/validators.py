@@ -184,7 +184,7 @@ if __name__ == "__main__":
     
     for url in test_urls:
         valid, error = validate_url(url)
-        status = "✓" if valid else "✗"
+        status = "yes" if valid else "no"
         print(f"{status} {url or '(empty)'}: {error or 'Valid'}")
     
     # Test selector validation
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     
     for selector in test_selectors:
         valid, error = validate_selector(selector)
-        status = "✓" if valid else "✗"
+        status = "yes" if valid else "no"
         print(f"{status} {selector or '(empty)'}: {error or 'Valid'}")
     
     # Test action validation
@@ -218,9 +218,9 @@ if __name__ == "__main__":
     
     for action in test_actions:
         valid, error = validate_action(action)
-        status = "✓" if valid else "✗"
+        status = "yes" if valid else "no"
         print(f"{status} {action}: {error or 'Valid'}")
     
     print("\n" + "=" * 70)
-    print("✅ Validators test completed!")
+    print("yes Validators test completed!")
     print("=" * 70)

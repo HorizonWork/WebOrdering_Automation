@@ -96,7 +96,7 @@ class LoginAgent(BaseSubAgent):
         login_keywords = ['đăng nhập', 'login', 'sign in', 'authentication']
         
         if any(kw in task_desc for kw in login_keywords):
-            logger.info("✓ Login task detected from description")
+            logger.info("yes Login task detected from description")
             return True
         
         # Check DOM for login form
@@ -105,7 +105,7 @@ class LoginAgent(BaseSubAgent):
         has_password = 'password' in dom
         
         if has_username and has_password:
-            logger.info("✓ Login form detected in DOM")
+            logger.info("yes Login form detected in DOM")
             return True
         
         return False
@@ -153,7 +153,7 @@ class LoginAgent(BaseSubAgent):
                     'message': 'Username field not found'
                 }
             
-            logger.info(f"✓ Found username field: {username_selector}")
+            logger.info(f"yes Found username field: {username_selector}")
             await self.skill_executor.execute(page, {
                 'skill': 'type',
                 'params': {
@@ -172,7 +172,7 @@ class LoginAgent(BaseSubAgent):
                     'message': 'Password field not found'
                 }
             
-            logger.info(f"✓ Found password field: {password_selector}")
+            logger.info(f"yes Found password field: {password_selector}")
             await self.skill_executor.execute(page, {
                 'skill': 'type',
                 'params': {
@@ -189,7 +189,7 @@ class LoginAgent(BaseSubAgent):
                 logger.warning("⚠️  Submit button not found, pressing Enter")
                 await page.keyboard.press('Enter')
             else:
-                logger.info(f"✓ Found submit button: {submit_selector}")
+                logger.info(f"yes Found submit button: {submit_selector}")
                 await self.skill_executor.execute(page, {
                     'skill': 'click',
                     'params': {'selector': submit_selector}
@@ -217,7 +217,7 @@ class LoginAgent(BaseSubAgent):
                 }
                 
         except Exception as e:
-            logger.error(f"❌ Login failed: {e}")
+            logger.error(f"no Login failed: {e}")
             self._record_failure()
             return {
                 'success': False,
@@ -241,7 +241,7 @@ class LoginAgent(BaseSubAgent):
         
         # Check URL change
         if any(kw in url for kw in ['dashboard', 'home', 'account', 'profile']):
-            logger.info("✓ Login success detected (URL changed)")
+            logger.info("yes Login success detected (URL changed)")
             return True
         
         # Check for error messages
@@ -272,7 +272,7 @@ class LoginAgent(BaseSubAgent):
             pass
         
         # Assume success if no errors found
-        logger.info("✓ No errors detected, assuming success")
+        logger.info("yes No errors detected, assuming success")
         return True
 
 
@@ -296,13 +296,13 @@ async def test_login_agent():
         observation = {'dom': '<input type="password" name="password"/>'}
         
         can_handle = await agent.can_handle(task, observation)
-        print(f"✓ Can handle login task: {can_handle}")
+        print(f"yes Can handle login task: {can_handle}")
         
         # Test 2: Navigate to login page
         await page.goto("https://example.com")  # Replace with actual login page
         await asyncio.sleep(2)
         
-        print("\n✅ Login agent ready (provide actual credentials to test execution)")
+        print("\nyes Login agent ready (provide actual credentials to test execution)")
         
         # Show stats
         print(f"\n📊 Stats: {agent.get_stats()}")

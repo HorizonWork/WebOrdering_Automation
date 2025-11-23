@@ -36,7 +36,7 @@ async def test_chrome_profile():
         
         # Get page
         page = manager.pages[0] if manager.pages else await manager.new_page()
-        print(f"✅ Chrome profile loaded with {len(manager.pages)} page(s)\n")
+        print(f"yes Chrome profile loaded with {len(manager.pages)} page(s)\n")
         
         # Test 1: Navigate to Shopee
         print("Test 1: Navigate to Shopee")
@@ -46,7 +46,7 @@ async def test_chrome_profile():
         
         await asyncio.sleep(2)
         title = await page.title()
-        print(f"✓ Page title: {title}")
+        print(f"yes Page title: {title}")
         
         # Check if logged in
         try:
@@ -54,7 +54,7 @@ async def test_chrome_profile():
             user_element = await page.query_selector('[class*="navbar__username"]')
             if user_element:
                 username = await user_element.inner_text()
-                print(f"✓ Logged in as: {username}")
+                print(f"yes Logged in as: {username}")
             else:
                 print("ℹ Not logged in yet")
         except Exception as e:
@@ -68,7 +68,7 @@ async def test_chrome_profile():
         page2 = await manager.new_page()
         await page2.goto("https://www.lazada.vn")
         await manager.wait_for_load(page2)
-        print(f"✓ Opened new tab (total: {len(manager.pages)} tabs)\n")
+        print(f"yes Opened new tab (total: {len(manager.pages)} tabs)\n")
         
         # Test 3: Screenshot
         print("Test 3: Take screenshot")
@@ -76,7 +76,7 @@ async def test_chrome_profile():
         screenshot_path = ROOT_DIR / "temp" / "chrome_profile_test.png"
         screenshot_path.parent.mkdir(exist_ok=True)
         await manager.screenshot(page, path=str(screenshot_path))
-        print(f"✓ Screenshot saved to: {screenshot_path}\n")
+        print(f"yes Screenshot saved to: {screenshot_path}\n")
         
         # Keep browser open to verify
         print("⏳ Keeping browser open for 10 seconds...")
@@ -85,14 +85,14 @@ async def test_chrome_profile():
         await asyncio.sleep(10)
         
     except RuntimeError as e:
-        print(f"\n❌ Error: {e}\n")
+        print(f"\nno Error: {e}\n")
         print("💡 Solution:")
         print("   1. Close all Chrome windows")
         print("   2. Run this test again\n")
         return False
         
     except FileNotFoundError as e:
-        print(f"\n❌ Error: {e}\n")
+        print(f"\nno Error: {e}\n")
         print("💡 Solution:")
         print("   1. Check Chrome installation path")
         print("   2. Verify profile directory name")
@@ -100,7 +100,7 @@ async def test_chrome_profile():
         return False
         
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}\n")
+        print(f"\nno Unexpected error: {e}\n")
         import traceback
         traceback.print_exc()
         return False
@@ -108,10 +108,10 @@ async def test_chrome_profile():
     finally:
         print("\n🔒 Closing browser...")
         await manager.close()
-        print("✅ Browser closed\n")
+        print("yes Browser closed\n")
     
     print("=" * 70)
-    print("✅ Chrome Profile Test Completed Successfully!")
+    print("yes Chrome Profile Test Completed Successfully!")
     print("=" * 70)
     return True
 

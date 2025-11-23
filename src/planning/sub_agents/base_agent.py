@@ -105,12 +105,12 @@ class BaseSubAgent(ABC):
     def _record_success(self):
         """Record successful execution"""
         self.success_count += 1
-        logger.info(f"✅ {self.name} succeeded (total: {self.success_count})")
+        logger.info(f"yes {self.name} succeeded (total: {self.success_count})")
     
     def _record_failure(self):
         """Record failed execution"""
         self.failure_count += 1
-        logger.warning(f"❌ {self.name} failed (total: {self.failure_count})")
+        logger.warning(f"no {self.name} failed (total: {self.failure_count})")
     
     def __repr__(self):
         return f"<{self.name}: {self.description}>"

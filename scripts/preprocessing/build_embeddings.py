@@ -98,7 +98,7 @@ def main():
     )
     trainer.train()
     model.save_pretrained(out); tok.save_pretrained(out)
-    print(f"✓ PhoBERT LoRA saved → {out}")
+    print(f"yes PhoBERT LoRA saved → {out}")
 
 if __name__ == "__main__":
     main()

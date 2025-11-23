@@ -136,6 +136,7 @@ class SkillExecutor:
 
         skill_name = normalized.get("skill")
         params: Dict[str, Any] = normalized.get("params", {}) or {}
+        optional = bool(action.get("optional") or params.get("optional"))
 
         if not skill_name:
             return {
@@ -163,6 +164,14 @@ class SkillExecutor:
 
             result = await skill_handler(page, **params)
 
+            # Optional actions should not fail the loop
+            if result.get("status") != "success" and optional:
+                return {
+                    "status": "success",
+                    "message": f"Optional action '{skill_name}' skipped: {result.get('message')}",
+                    "data": {"skipped": True},
+                }
+
             logger.debug(
                 "Skill %s finished with status=%s",
                 skill_name,
@@ -173,6 +182,12 @@ class SkillExecutor:
 
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Skill execution failed: %s", exc, exc_info=True)
+            if optional:
+                return {
+                    "status": "success",
+                    "message": f"Optional action '{skill_name}' skipped: {exc}",
+                    "data": {"skipped": True},
+                }
             return {
                 "status": "error",
                 "message": str(exc),

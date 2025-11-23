@@ -107,7 +107,7 @@ class SelfImprovement:
                 }
             )
             
-            logger.info(f"✓ Stored successful strategy for: '{query[:50]}...'")
+            logger.info(f"yes Stored successful strategy for: '{query[:50]}...'")
             
         else:
             # Analyze failure
@@ -116,7 +116,7 @@ class SelfImprovement:
                 'steps': steps
             })
             
-            logger.warning(f"✗ Task failed: {analysis['total_errors']} errors")
+            logger.warning(f"no Task failed: {analysis['total_errors']} errors")
             logger.info(f"   Most common issue: {analysis['most_common_category']}")
             logger.info(f"   Suggestions: {len(analysis['recovery_suggestions'])}")
             
@@ -364,7 +364,7 @@ if __name__ == "__main__":
         success=False
     )
     
-    print(f"✓ Learned from 2 executions")
+    print(f"yes Learned from 2 executions")
     
     # Test 2: Get suggestions
     print("\n\nTest 2: Improvement Suggestions")
@@ -382,4 +382,4 @@ if __name__ == "__main__":
     report = si.get_performance_report()
     print(report)
     
-    print("\n✅ All Tests Completed!")
+    print("\nyes All Tests Completed!")

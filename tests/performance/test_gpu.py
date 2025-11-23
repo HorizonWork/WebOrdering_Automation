@@ -43,12 +43,12 @@ def check_pytorch_installation():
     """Check PyTorch installation"""
     print_section("PyTorch Installation")
     
-    print(f"✓ PyTorch version: {torch.__version__}")
+    print(f"yes PyTorch version: {torch.__version__}")
     print(f"  Installed from: {torch.__file__}")
     
     # Check if CUDA is compiled
     cuda_available = torch.cuda.is_available()
-    print(f"\n{'✅' if cuda_available else '❌'} CUDA available: {cuda_available}")
+    print(f"\n{'yes' if cuda_available else 'no'} CUDA available: {cuda_available}")
     
     if torch.version.cuda:
         print(f"  CUDA version (PyTorch): {torch.version.cuda}")
@@ -60,10 +60,10 @@ def check_pytorch_installation():
     
     # Check cuDNN
     if torch.backends.cudnn.is_available():
-        print(f"✅ cuDNN available: {torch.backends.cudnn.version()}")
+        print(f"yes cuDNN available: {torch.backends.cudnn.version()}")
         print(f"  cuDNN enabled: {torch.backends.cudnn.enabled}")
     else:
-        print("❌ cuDNN not available")
+        print("no cuDNN not available")
 
 
 def check_system_cuda():
@@ -79,12 +79,12 @@ def check_system_cuda():
             timeout=5
         )
         if result.returncode == 0:
-            print("✅ NVCC found:")
+            print("yes NVCC found:")
             print("  " + result.stdout.strip().split('\n')[-1])
         else:
-            print("❌ NVCC not found")
+            print("no NVCC not found")
     except FileNotFoundError:
-        print("❌ NVCC not found in PATH")
+        print("no NVCC not found in PATH")
         print("   CUDA Toolkit may not be installed")
     except Exception as e:
         print(f"⚠️  Error checking NVCC: {e}")
@@ -98,14 +98,14 @@ def check_system_cuda():
             timeout=5
         )
         if result.returncode == 0:
-            print("\n✅ NVIDIA Driver found:")
+            print("\nyes NVIDIA Driver found:")
             print("-" * 70)
             print(result.stdout)
             print("-" * 70)
         else:
-            print("❌ nvidia-smi failed")
+            print("no nvidia-smi failed")
     except FileNotFoundError:
-        print("\n❌ nvidia-smi not found")
+        print("\nno nvidia-smi not found")
         print("   NVIDIA Driver may not be installed")
     except Exception as e:
         print(f"\n⚠️  Error checking nvidia-smi: {e}")
@@ -116,7 +116,7 @@ def check_gpu_devices():
     print_section("GPU Devices")
     
     if torch.cuda.is_available():
-        print(f"✅ Number of GPUs: {torch.cuda.device_count()}")
+        print(f"yes Number of GPUs: {torch.cuda.device_count()}")
         
         for i in range(torch.cuda.device_count()):
             print(f"\n🎮 GPU {i}:")
@@ -138,14 +138,14 @@ def check_gpu_devices():
             print(f"     Reserved:  {reserved:.2f} GB")
             print(f"     Free:      {free:.2f} GB")
     else:
-        print("❌ No CUDA GPUs available")
+        print("no No CUDA GPUs available")
         
         # Check for other accelerators
         if torch.backends.mps.is_available():
-            print("\n✅ Apple MPS (Metal) available")
+            print("\nyes Apple MPS (Metal) available")
             print("   (Mac with Apple Silicon)")
         else:
-            print("\n❌ No GPU acceleration available")
+            print("\nno No GPU acceleration available")
             print("   Running on CPU only")
 
 
@@ -159,23 +159,23 @@ def test_gpu_operations():
     
     try:
         device = torch.device('cuda:0')
-        print(f"✓ Using device: {device}")
+        print(f"yes Using device: {device}")
         
         # Test tensor creation
         print("\n1. Testing tensor creation...")
         x = torch.randn(1000, 1000, device=device)
-        print(f"   ✅ Created tensor on GPU: {x.shape}")
+        print(f"   yes Created tensor on GPU: {x.shape}")
         
         # Test computation
         print("\n2. Testing computation...")
         y = torch.matmul(x, x.T)
-        print(f"   ✅ Matrix multiplication successful: {y.shape}")
+        print(f"   yes Matrix multiplication successful: {y.shape}")
         
         # Test CPU-GPU transfer
         print("\n3. Testing CPU <-> GPU transfer...")
         x_cpu = x.cpu()
         x_gpu = x_cpu.cuda()
-        print(f"   ✅ Data transfer successful")
+        print(f"   yes Data transfer successful")
         
         # Test memory allocation
         print("\n4. Testing memory allocation...")
@@ -183,17 +183,17 @@ def test_gpu_operations():
         for i in range(5):
             t = torch.randn(1000, 1000, device=device)
             tensors.append(t)
-        print(f"   ✅ Allocated 5 tensors")
+        print(f"   yes Allocated 5 tensors")
         
         # Clean up
         del tensors, x, y, x_cpu, x_gpu
         torch.cuda.empty_cache()
-        print(f"   ✅ Memory cleaned up")
+        print(f"   yes Memory cleaned up")
         
-        print("\n✅ All GPU operations passed!")
+        print("\nyes All GPU operations passed!")
         
     except Exception as e:
-        print(f"\n❌ GPU operation failed: {e}")
+        print(f"\nno GPU operation failed: {e}")
 
 
 def test_gpu_memory():
@@ -230,7 +230,7 @@ def test_gpu_memory():
             
             actual_mb = end_mem - start_mem
             
-            print(f"✅ Allocated {actual_mb:.0f} MB "
+            print(f"yes Allocated {actual_mb:.0f} MB "
                   f"(requested {size_mb} MB) - "
                   f"Shape: {tensor.shape}")
             
@@ -239,7 +239,7 @@ def test_gpu_memory():
             torch.cuda.empty_cache()
             
         except RuntimeError as e:
-            print(f"❌ Failed to allocate {size_mb} MB: {e}")
+            print(f"no Failed to allocate {size_mb} MB: {e}")
             break
     
     print("-" * 70)
@@ -332,7 +332,7 @@ def print_recommendations():
     print_section("Recommendations")
     
     if not torch.cuda.is_available():
-        print("❌ CUDA not available. To fix:\n")
+        print("no CUDA not available. To fix:\n")
         
         print("1. Check if you have an NVIDIA GPU:")
         print("   Run: nvidia-smi")
@@ -352,7 +352,7 @@ def print_recommendations():
         print("   python -c \"import torch; print(torch.cuda.is_available())\"")
         
     elif torch.cuda.device_count() > 0:
-        print("✅ GPU setup looks good!\n")
+        print("yes GPU setup looks good!\n")
         
         print("For optimal performance:")
         print("1. Use mixed precision training: --fp16")
@@ -398,7 +398,7 @@ def main():
     print_recommendations()
     
     print("\n" + "=" * 70)
-    print(" ✅ Diagnostics Complete")
+    print(" yes Diagnostics Complete")
     print("=" * 70)
 
 

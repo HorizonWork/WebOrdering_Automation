@@ -2,37 +2,6 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AdamW
-from pathlib import Path
-import json
-
-class WebAutomationDataset(Dataset):
-    """Dataset for ViT5 fine-tuning on web automation"""
-    
-    def __init__(self, data_path: str, tokenizer, max_length: int = 512):
-        self.tokenizer = tokenizer
-        self.max_length = max_length
-        
-        # Load training data
-        with open(data_path, 'r', encoding='utf-8') as f:
-            self.data = json.load(f)
-    
-    def __len__(self):
-        return len(self.data)
-    
-    def __getitem__(self, idx):
-        item = self.data[idx]
-        
-        # Input: task + state
-        input_text = f"Nhiệm vụ: {item['query']} | Trạng thái: {item['state']}"
-        
-        # Target: thought + action
-        target_text = f"Suy nghĩ: {item['thought']} | Hành động: {json.dumps(item['action'], ensure_ascii=False)}"
-        
-        # Tokenize
-        inputs = self.tokenizer(
-            input_text,
-            max_length=self.max_length,
-            padding='max_length',
             truncation=True,
             return_tensors='pt'
         )

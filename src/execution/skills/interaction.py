@@ -22,11 +22,15 @@ class InteractionSkills(BaseSkill):
     
     async def click(self, page, selector: str, timeout: int = 5000, **kwargs):
         """Click element"""
-        try:
-            await page.click(selector, timeout=timeout)
-            return self._success(f"Clicked {selector}")
-        except Exception as e:
-            return self._error(f"Click failed: {str(e)}")
+        selectors = self._collect_selectors(selector, kwargs.get("fallback_selectors"))
+        for idx, sel in enumerate(selectors):
+            try:
+                await page.click(sel, timeout=timeout)
+                return self._success(f"Clicked {sel}")
+            except Exception as e:
+                if idx == len(selectors) - 1:
+                    return self._error(f"Click failed ({sel}): {str(e)}")
+                continue
     
     async def type(self, page, selector: str, text: str, clear: bool = False, timeout: int = 5000, **kwargs):
         """Type text"""
@@ -40,19 +44,27 @@ class InteractionSkills(BaseSkill):
     
     async def fill(self, page, selector: str, text: str, timeout: int = 5000, **kwargs):
         """Fill input (faster than type)"""
-        try:
-            await page.fill(selector, text, timeout=timeout)
-            return self._success(f"Filled {selector}")
-        except Exception as e:
-            return self._error(f"Fill failed: {str(e)}")
+        selectors = self._collect_selectors(selector, kwargs.get("fallback_selectors"))
+        for idx, sel in enumerate(selectors):
+            try:
+                await page.fill(sel, text, timeout=timeout)
+                return self._success(f"Filled {sel}")
+            except Exception as e:
+                if idx == len(selectors) - 1:
+                    return self._error(f"Fill failed ({sel}): {str(e)}")
+                continue
     
     async def select(self, page, selector: str, value: str, timeout: int = 5000, **kwargs):
         """Select dropdown option"""
-        try:
-            await page.select_option(selector, value, timeout=timeout)
-            return self._success(f"Selected '{value}' in {selector}")
-        except Exception as e:
-            return self._error(f"Select failed: {str(e)}")
+        selectors = self._collect_selectors(selector, kwargs.get("fallback_selectors"))
+        for idx, sel in enumerate(selectors):
+            try:
+                await page.select_option(sel, value, timeout=timeout)
+                return self._success(f"Selected '{value}' in {sel}")
+            except Exception as e:
+                if idx == len(selectors) - 1:
+                    return self._error(f"Select failed ({sel}): {str(e)}")
+                continue
     
     async def hover(self, page, selector: str, timeout: int = 5000, **kwargs):
         """Hover over element"""
@@ -93,7 +105,7 @@ class InteractionSkills(BaseSkill):
             else:
                 delta = step if direction == "down" else -step
                 await page.evaluate(
-                    "() => window.scrollBy({top: arguments[0], behavior: 'smooth'})",
+                    "(delta) => window.scrollBy({top: delta, behavior: 'smooth'})",
                     delta,
                 )
 
@@ -101,3 +113,10 @@ class InteractionSkills(BaseSkill):
             return self._success(f"Scrolled {direction} by {step}px")
         except Exception as e:
             return self._error(f"Scroll failed: {str(e)}")
+
+    def _collect_selectors(self, primary: str, fallbacks):
+        """Combine primary and fallback selectors into a list."""
+        selectors = [primary] if primary else []
+        if fallbacks and isinstance(fallbacks, (list, tuple)):
+            selectors.extend([f for f in fallbacks if f])
+        return selectors or [primary]

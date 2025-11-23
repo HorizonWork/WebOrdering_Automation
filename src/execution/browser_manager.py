@@ -172,12 +172,12 @@ class BrowserManager:
                 page = await self.context.new_page()
                 self.pages.append(page)
                 
-            logger.info(f"✅ Persistent context ready with {len(self.pages)} page(s).")
+            logger.info(f"yes Persistent context ready with {len(self.pages)} page(s).")
             
         except Exception as e:
             error_msg = str(e)
             if "Target page, context or browser has been closed" in error_msg:
-                logger.critical("❌ Browser crash! Maybe the profile is in use by another Chrome window?")
+                logger.critical("no Browser crash! Maybe the profile is in use by another Chrome window?")
             raise e
 
     async def _launch_standard(self):
@@ -195,7 +195,7 @@ class BrowserManager:
             viewport=self.viewport,
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         )
-        logger.info("✅ Standard browser launched.")
+        logger.info("yes Standard browser launched.")
     
     async def new_page(self) -> Page:
         """
@@ -266,7 +266,7 @@ class BrowserManager:
             self.playwright = None
             
         self.pages = []
-        logger.info("✅ Browser shutdown complete.")
+        logger.info("yes Browser shutdown complete.")
 
     async def get_html(self, page: Page) -> str:
         """Safe get HTML content."""

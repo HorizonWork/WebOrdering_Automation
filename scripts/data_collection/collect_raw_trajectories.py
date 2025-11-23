@@ -44,7 +44,7 @@ from src.utils.logger import get_logger, setup_logging
 
 logger = get_logger(__name__)
 
-
+UI_DETECTOR = UIDetector()
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
@@ -59,6 +59,7 @@ class StepRecord:
     result: Dict[str, Any]
     page_state: Dict[str, Any]
     assets: Dict[str, str]  # Paths to saved screenshot/dom files
+    observation: Dict[str, Any]
     teacher_labels: Optional[Dict[str, Any]] = None
 
 
@@ -283,35 +284,165 @@ def clean_observation_for_json(obs: Dict[str, Any]) -> Dict[str, Any]:
         else:
             clean_obs[key] = val
     return clean_obs
+def infer_page_type_from_url_and_ui(url: str, ui_info: Optional[Dict[str, Any]]) -> str:
+    """
+    Heuristic suy ra page_type từ URL + kết quả UIDetector.
 
+    Kết quả trả về align với ví dụ trong observation_state.schema.json:
+      - "search_results"
+      - "product_detail"
+      - "cart"
+      - "checkout"
+      - "login"
+      - "home"
+      - "unknown"
+    """
+    url_l = (url or "").lower()
+    ui_info = ui_info or {}
+    ui_page_type = (ui_info.get("page_type") or "").lower()
+
+    # URL hard patterns ưu tiên trước
+    if "cart" in url_l:
+        return "cart"
+    if "checkout" in url_l or "payment" in url_l:
+        return "checkout"
+    if "login" in url_l:
+        return "login"
+
+    # Search / listing
+    if any(k in url_l for k in ["search", "catalog", "q=", "keyword="]):
+        return "search_results"
+
+    # Product detail
+    if any(k in url_l for k in ["/product", "/products/", "/pdp", "-i."]) or url_l.endswith(".html"):
+        return "product_detail"
+
+    # Fallback theo UIDetector
+    if "login" in ui_page_type:
+        return "login"
+    if "product_listing" in ui_page_type:
+        return "search_results"
+    if "search" in ui_page_type:
+        return "search_results"
+
+    if not ui_page_type:
+        return "unknown"
+    return ui_page_type
+
+
+def build_page_state_from_observation(
+    observation: Dict[str, Any],
+    assets_meta: Dict[str, str],
+    ui_detector: Optional[UIDetector] = None,
+) -> Dict[str, Any]:
+    """
+    Build 1 snapshot page_state gần với ObservationState:
+    {
+      "url": ...,
+      "page_type": ...,
+      "dom_state": {...},
+      "vision_state": {...},
+      "actions": [...]
+    }
+    """
+    url = observation.get("url", "")
+    # HTML hoặc text để feed vào UIDetector
+    html_or_text = (
+        observation.get("dom_html")
+        or observation.get("raw_html")
+        or observation.get("dom")
+        or ""
+    )
+
+    ui_info: Dict[str, Any] = {}
+    detector = ui_detector or UI_DETECTOR
+    if detector and html_or_text:
+        try:
+            ui_info = detector.detect_all(html_or_text) or {}
+        except Exception as exc:
+            logger.debug(f"UIDetector.detect_all failed: {exc}")
+            ui_info = {}
+
+    page_type = infer_page_type_from_url_and_ui(url, ui_info)
+
+    elements = (
+        observation.get("interactive_elements")
+        or observation.get("elements")
+        or []
+    )
+
+    # DOM-state: để simple trước, có thể enrich sau
+    dom_state: Dict[str, Any] = {
+        "title": observation.get("title", ""),
+        "products": [],  # TODO: parse từ DOM nếu muốn
+        "filters": [],   # TODO: parse từ DOM nếu muốn
+    }
+    # Cho teacher / debug, thêm text_excerpt (không có trong schema nhưng không sao)
+    dom_text = observation.get("dom") or ""
+    if dom_text:
+        dom_state["text_excerpt"] = dom_text[:20000]
+
+    vision_state: Dict[str, Any] = {
+        "screenshot_id": assets_meta.get("screenshot"),
+        "elements": elements,
+    }
+
+    page_state: Dict[str, Any] = {
+        "url": url,
+        "page_type": page_type,
+        "dom_state": dom_state,
+        "vision_state": vision_state,
+        "actions": [],  # hiện tại chưa build DSL action list, sẽ làm sau
+    }
+
+    # Nếu muốn xem UI detection trong debug / offline thì có thể giữ thêm:
+    # page_state["ui_detection"] = ui_info
+
+    return page_state
 
 async def process_history_and_save_assets(
     episode_id: str,
     history: List[Dict[str, Any]],
     query: str,
     raw_paths: Dict[str, Path],
-    teacher: Optional[TeacherBase]
+    teacher: Optional[TeacherBase],
 ) -> List[StepRecord]:
     """
     Duyệt qua history thô:
     1. Lưu ảnh/DOM ra file.
-    2. Gọi Teacher async.
-    3. Tạo StepRecord sạch (không có bytes).
+    2. Build page_state align với ObservationState (dùng UIDetector).
+    3. (Optional) Gọi Teacher để lấy teacher_labels.
+    4. Tạo StepRecord sạch (không có bytes).
     """
-    records = []
-    
+    records: List[StepRecord] = []
+
     screenshot_dir = ensure_dir(raw_paths["screenshots"] / episode_id)
     dom_dir = ensure_dir(raw_paths["dom"] / episode_id)
 
     for i, item in enumerate(history):
         step_num = i + 1
-        
+
+        # Chuẩn hóa observation
+        observation = item.get("observation") or {}
+        if not observation:
+            result_candidate = item.get("result", {})
+            if isinstance(result_candidate, dict) and any(
+                key in result_candidate for key in ("url", "dom", "dom_html", "screenshot")
+            ):
+                observation = result_candidate
+
+        result_payload = item.get("result", {}) or {}
+
         # 1. Xử lý Assets
-        assets_meta = {}
-        
+        assets_meta: Dict[str, str] = {}
+
         # -- Screenshot --
-        screenshot = item.get("screenshot") or item.get("observation", {}).get("screenshot")
-        if screenshot and isinstance(screenshot, bytes):
+        screenshot = (
+            item.get("screenshot")
+            or observation.get("screenshot")
+            or (result_payload if isinstance(result_payload, dict) else {}).get("screenshot")
+        )
+        if isinstance(screenshot, bytes):
             try:
                 file_name = f"step_{step_num}.png"
                 file_path = screenshot_dir / file_name
@@ -321,9 +452,11 @@ async def process_history_and_save_assets(
                 logger.warning(f"Failed to save screenshot step {step_num}: {e}")
 
         # -- DOM Snapshot --
-        observation = item.get("observation", {})
-        dom_content = observation.get("dom") or observation.get("dom_html")
-        if dom_content and isinstance(dom_content, str):
+        dom_content = (
+            observation.get("dom_html")
+            or observation.get("dom")
+        )
+        if isinstance(dom_content, str) and dom_content:
             try:
                 file_name = f"step_{step_num}.html"
                 file_path = dom_dir / file_name
@@ -332,9 +465,14 @@ async def process_history_and_save_assets(
             except Exception as e:
                 logger.warning(f"Failed to save DOM step {step_num}: {e}")
 
-        # 2. Chuẩn bị dữ liệu cho Teacher
-        page_state = {"url": observation.get("url", ""), "title": ""}
+        # 2. Build page_state (align ObservationState) dùng UIDetector
+        page_state = build_page_state_from_observation(
+            observation=observation,
+            assets_meta=assets_meta,
+            ui_detector=UI_DETECTOR,
+        )
 
+        # 3. Gọi Teacher (nếu có) để sinh planner/controller labels
         teacher_label = None
         if teacher:
             short_hist = history[max(0, i - 2) : i]
@@ -343,22 +481,25 @@ async def process_history_and_save_assets(
             except Exception as e:
                 logger.warning(f"Teacher labeling failed at step {step_num}: {e}")
 
-        # 3. Tạo Record - Clean observation (remove bytes)
+        # 4. Tạo Record - Clean observation & result (remove bytes)
         clean_obs = clean_observation_for_json(observation)
-            
-        records.append(StepRecord(
-            step=step_num,
-            timestamp=item.get("timestamp", datetime.now().isoformat()),
-            thought=item.get("thought", ""),
-            action=item.get("action", {}),
-            result=clean_obs,
-            page_state=page_state,
-            assets=assets_meta,
-            teacher_labels=teacher_label
-        ))
+        clean_result = clean_observation_for_json(result_payload) if isinstance(result_payload, dict) else {}
+
+        records.append(
+            StepRecord(
+                step=step_num,
+                timestamp=item.get("timestamp", datetime.now().isoformat()),
+                thought=item.get("thought", ""),
+                action=item.get("action", {}),
+                result=clean_result,
+                page_state=page_state,
+                assets=assets_meta,
+                observation=clean_obs,
+                teacher_labels=teacher_label,
+            )
+        )
 
     return records
-
 
 # ---------------------------------------------------------------------------
 # Main Logic
@@ -450,7 +591,7 @@ async def collect_one_episode(
             json_content = json.dumps(episode_to_json_dict(ep), ensure_ascii=False, indent=2)
             save_path.write_text(json_content, encoding="utf-8")
 
-            logger.info(f"✅ Episode saved: {save_path} (Status: {final_status})")
+            logger.info(f"yes Episode saved: {save_path} (Status: {final_status})")
             
             mirror_episode_to_outcome(save_path, ep.success, trajectory_root)
 
@@ -458,7 +599,7 @@ async def collect_one_episode(
             return save_path
 
         except Exception as save_err:
-            logger.error(f"❌ Failed to save episode file: {save_err}")
+            logger.error(f"no Failed to save episode file: {save_err}")
             traceback.print_exc()
             await orchestrator.close()
             return None

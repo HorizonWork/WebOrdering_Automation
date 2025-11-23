@@ -215,7 +215,7 @@ def main():
     trainer.train()
     model.save_pretrained(out)
     tok.save_pretrained(out)
-    print(f"✓ ViT5 LoRA saved → {out}")
+    print(f"yes ViT5 LoRA saved → {out}")
 
 
 if __name__ == "__main__":

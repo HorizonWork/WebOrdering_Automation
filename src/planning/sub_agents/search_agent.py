@@ -104,13 +104,13 @@ class SearchAgent(BaseSubAgent):
         ]
         
         if any(kw in task_desc for kw in search_keywords):
-            logger.info("✓ Search task detected from description")
+            logger.info("yes Search task detected from description")
             return True
         
         # Check if search box present
         dom = observation.get('dom', '').lower()
         if any(kw in dom for kw in ['search', 'tìm kiếm', 'type="search"']):
-            logger.info("✓ Search box detected in DOM")
+            logger.info("yes Search box detected in DOM")
             return True
         
         return False
@@ -164,7 +164,7 @@ class SearchAgent(BaseSubAgent):
                     'message': 'Search input not found'
                 }
             
-            logger.info(f"✓ Found search input: {search_input}")
+            logger.info(f"yes Found search input: {search_input}")
             
             # Step 2: Type query
             await self.skill_executor.execute(page, {
@@ -179,7 +179,7 @@ class SearchAgent(BaseSubAgent):
             # Step 3: Submit search
             search_button = await self._find_search_button(page, platform)
             if search_button:
-                logger.info(f"✓ Found search button: {search_button}")
+                logger.info(f"yes Found search button: {search_button}")
                 await self.skill_executor.execute(page, {
                     'skill': 'click',
                     'params': {'selector': search_button}
@@ -220,7 +220,7 @@ class SearchAgent(BaseSubAgent):
             }
             
         except Exception as e:
-            logger.error(f"❌ Search failed: {e}")
+            logger.error(f"no Search failed: {e}")
             self._record_failure()
             return {
                 'success': False,
@@ -387,7 +387,7 @@ async def test_search_agent():
         observation = {'dom': '<input type="search"/>'}
         
         can_handle = await agent.can_handle(task, observation)
-        print(f"✓ Can handle search task: {can_handle}")
+        print(f"yes Can handle search task: {can_handle}")
         
         # Test 2: Execute search on Shopee
         await page.goto("https://shopee.vn")
@@ -404,7 +404,7 @@ async def test_search_agent():
         print(f"\n🔍 Executing search: {task['query']}")
         result = await agent.execute(task, page, observation)
         
-        print(f"\n✅ Result: {result['message']}")
+        print(f"\nyes Result: {result['message']}")
         if result['success']:
             print(f"   Found {len(result.get('results', []))} products")
             for r in result.get('results', [])[:3]:

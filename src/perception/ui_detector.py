@@ -157,7 +157,7 @@ class UIDetector:
         elif 'lazada' in text_content:
              results['platform_specific'] = self.detect_platform_specific_elements(html, 'lazada')
 
-        logger.info(f"✓ UI detection complete: {results['page_type']}")
+        logger.info(f"yes UI detection complete: {results['page_type']}")
         
         return results
     
@@ -322,7 +322,7 @@ class UIDetector:
                     'type': button.get('type')
                 })
         
-        logger.info(f"✓ Found {len(buttons)} '{action_type}' buttons")
+        logger.info(f"yes Found {len(buttons)} '{action_type}' buttons")
         return buttons
 
 
@@ -392,5 +392,5 @@ if __name__ == "__main__":
         print(f"  - {btn['text']} ({btn['tag']})")
     
     print("\n" + "=" * 70)
-    print("✅ All Tests Completed!")
+    print("yes All Tests Completed!")
     print("=" * 70)

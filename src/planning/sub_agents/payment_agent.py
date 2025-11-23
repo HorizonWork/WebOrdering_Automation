@@ -93,13 +93,13 @@ class PaymentAgent(BaseSubAgent):
         ]
         
         if any(kw in task_desc for kw in payment_keywords):
-            logger.info("✓ Payment task detected")
+            logger.info("yes Payment task detected")
             return True
         
         # Check DOM
         dom = observation.get('dom', '').lower()
         if any(kw in dom for kw in ['checkout', 'payment', 'cart', 'thanh toán']):
-            logger.info("✓ Payment page detected")
+            logger.info("yes Payment page detected")
             return True
         
         return False
@@ -199,7 +199,7 @@ class PaymentAgent(BaseSubAgent):
             }
             
         except Exception as e:
-            logger.error(f"❌ Payment flow failed: {e}")
+            logger.error(f"no Payment flow failed: {e}")
             self._record_failure()
             return {
                 'success': False,
@@ -249,7 +249,7 @@ class PaymentAgent(BaseSubAgent):
                 element = await page.query_selector(selector)
                 if element:
                     await element.click()
-                    logger.info(f"✓ Selected payment method: {keyword}")
+                    logger.info(f"yes Selected payment method: {keyword}")
                     return
             except:
                 continue
@@ -271,10 +271,10 @@ async def test_payment_agent():
     observation = {'dom': '<button>Checkout</button>'}
     
     can_handle = await agent.can_handle(task, observation)
-    print(f"✓ Can handle payment task: {can_handle}")
+    print(f"yes Can handle payment task: {can_handle}")
     
     print(f"\n📊 Stats: {agent.get_stats()}")
-    print("\n✅ Payment agent ready")
+    print("\nyes Payment agent ready")
 
 
 if __name__ == "__main__":

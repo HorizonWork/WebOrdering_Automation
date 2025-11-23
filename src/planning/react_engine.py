@@ -93,7 +93,7 @@ class ReActEngine:
         query: str,
         observation: Dict,
         available_skills: Optional[List[str]] = None
-    ) -> tuple[str, Dict]:
+    ) -> tuple[str, Dict, Dict]:
         """
         Execute one ReAct step: Thought → Action.
         
@@ -103,11 +103,11 @@ class ReActEngine:
             available_skills: Available skills for action generation
             
         Returns:
-            (thought, action) tuple
+            (thought, action, observation) tuple
             
         Example:
             >>> engine = ReActEngine()
-            >>> thought, action = await engine.step(
+            >>> thought, action, obs = await engine.step(
             ...     query="Tìm áo khoác",
             ...     observation={'url': '...', 'dom': '...'},
             ...     available_skills=['goto', 'click', 'type']
@@ -116,6 +116,8 @@ class ReActEngine:
             "Cần click vào search box để tìm kiếm"
             >>> print(action)
             {'skill': 'click', 'params': {'selector': '#search'}}
+            >>> print(obs['url'])
+            'https://shopee.vn'
         """
         step_num = len(self.history) + 1
         
@@ -136,7 +138,7 @@ class ReActEngine:
         logger.info(f"   Thought: {thought[:100]}...")
         
         # STEP 2: ACT - Generate action
-        logger.info("⚡ Generating action...")
+        logger.info("lightning Generating action...")
         action = self.planner.generate_action(
             query=query,
             observation=observation,
@@ -147,7 +149,7 @@ class ReActEngine:
         logger.info(f"   Action: {action['skill']}({action['params']})")
         logger.info(f"   Confidence: {action.get('confidence', 0):.2f}")
         
-        return thought, action
+        return thought, action, observation
     
     def add_step(
         self,
@@ -178,9 +180,22 @@ class ReActEngine:
         self.history.append(step)
         
         # Log summary
-        status_emoji = "✅" if result.get('status') == 'success' else "❌"
+        status_emoji = "yes" if result.get('status') == 'success' else "no"
         logger.info(f"{status_emoji} Step {step_num}: {action.get('skill')} - {result.get('status')}")
     
+    def _build_page_state(self, observation: Dict) -> Dict:
+        """
+        Build a lightweight page_state snapshot derived from the observation.
+        """
+        elements = observation.get('interactive_elements') or observation.get('elements') or []
+        dom_html = observation.get('dom_html') or observation.get('dom') or ''
+        return {
+            'url': observation.get('url', ''),
+            'dom': dom_html,
+            'elements_count': len(elements),
+            'elements': elements,
+        }
+
     def get_history(self, last_n: Optional[int] = None) -> List[Dict]:
         """
         Get history as list of dictionaries.
@@ -199,6 +214,7 @@ class ReActEngine:
                 'thought': s.thought,
                 'action': s.action,
                 'observation': s.observation,
+                'page_state': self._build_page_state(s.observation) if s.observation else {},
                 'result': s.result,
                 'timestamp': s.timestamp
             }
@@ -278,11 +294,11 @@ class ReActEngine:
 ReAct Execution Summary
 {'='*70}
 📊 Total steps: {progress['steps']}
-✅ Successful: {progress['successful']}
-❌ Failed: {progress['failed']}
+yes Successful: {progress['successful']}
+no Failed: {progress['failed']}
 📈 Success rate: {progress['success_rate']:.1%}
 🏁 Status: {progress['completion_status']}
-⚡ Last action: {progress.get('last_action', {}).get('skill', 'N/A')}
+lightning Last action: {progress.get('last_action', {}).get('skill', 'N/A')}
 {'='*70}
 """
         return summary.strip()
@@ -394,14 +410,14 @@ if __name__ == "__main__":
             print(f"{'='*70}")
             
             # Generate thought & action
-            thought, action = await engine.step(
+            thought, action, obs_from_step = await engine.step(
                 query=query,
                 observation=observation,
                 available_skills=['goto', 'click', 'type', 'complete']
             )
             
             print(f"\n💭 Thought: {thought}")
-            print(f"⚡ Action: {action['skill']}({action['params']})")
+            print(f"lightning Action: {action['skill']}({action['params']})")
             
             # Mock result
             result = {
@@ -414,7 +430,7 @@ if __name__ == "__main__":
                 step_num=i+1,
                 thought=thought,
                 action=action,
-                observation=observation,
+                observation=obs_from_step,
                 result=result
             )
             

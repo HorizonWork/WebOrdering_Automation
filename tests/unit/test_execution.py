@@ -49,10 +49,10 @@ async def test_execution_layer():
                 else:
                     search_input = await page.wait_for_selector(selector, timeout=2000)
                 found_selector = selector
-                print(f"✅ Found with selector: {selector}")
+                print(f"yes Found with selector: {selector}")
                 break
             except Exception:
-                print(f"❌ Not found: {selector}")
+                print(f"no Not found: {selector}")
                 continue
         
         if not search_input:

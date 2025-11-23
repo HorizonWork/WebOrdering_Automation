@@ -46,8 +46,8 @@ class DOMDistiller:
     
     def __init__(
         self,
-        max_dom_size: int = 50000,
-        max_elements: int = 300
+        max_dom_size: int = 40000,
+        max_elements: int = 250
     ):
         """
         Initialize DOM distiller.
@@ -62,13 +62,13 @@ class DOMDistiller:
         # Interactive elements we care about
         self.interactive_tags = {
             'input', 'button', 'a', 'select', 'textarea',
-            'form', 'label'
+            'form', 'label', 'li'
         }
         
         # Important attributes to keep
         self.important_attrs = {
             'id', 'class', 'name', 'type', 'placeholder',
-            'href', 'value', 'aria-label', 'role'
+            'href', 'value', 'aria-label', 'role', 'mmid'
         }
         
         logger.info(f"DOMDistiller initialized (max_size={max_dom_size}, max_elements={max_elements})")
@@ -165,26 +165,10 @@ class DOMDistiller:
                     if isinstance(tag.attrs, dict):
                         style = tag.attrs.get('style', '')
                     
-                    # Check if hidden
+                    # Check if hidden via inline style only (avoid over-removal via class names)
                     if style and isinstance(style, str):
                         style_lower = style.lower().replace(' ', '')
                         if 'display:none' in style_lower or 'visibility:hidden' in style_lower:
-                            if hasattr(tag, 'decompose'):
-                                tag.decompose()
-                            continue
-                    
-                    # Safe get class
-                    classes = []
-                    if isinstance(tag.attrs, dict):
-                        classes = tag.attrs.get('class', [])
-                    
-                    # Check if has hidden class
-                    if classes:
-                        class_str = ' '.join(classes) if isinstance(classes, list) else str(classes)
-                        class_lower = class_str.lower()
-                        
-                        hidden_keywords = ['hidden', 'hide', 'd-none', 'invisible', 'display-none']
-                        if any(kw in class_lower for kw in hidden_keywords):
                             if hasattr(tag, 'decompose'):
                                 tag.decompose()
                             continue
@@ -316,9 +300,26 @@ class DOMDistiller:
             self._remove_noise(soup)
             
             elements = []
-            
-            for idx, tag in enumerate(soup.find_all(self.interactive_tags)):
-                if not tag:
+
+            all_tags = list(soup.find_all(True))
+
+            def _is_interactive(tag) -> bool:
+                try:
+                    if tag.name in self.interactive_tags:
+                        return True
+                    role = tag.attrs.get("role") if isinstance(tag.attrs, dict) else None
+                    if role and str(role).lower() == "button":
+                        return True
+                    if tag.name == "li" and tag.find("a"):
+                        return True
+                except Exception:
+                    return False
+                return False
+
+            for idx, tag in enumerate(all_tags):
+                if not tag or not tag.name:
+                    continue
+                if not _is_interactive(tag):
                     continue
                 
                 try:
@@ -337,11 +338,17 @@ class DOMDistiller:
                             if k in self.important_attrs
                         }
                     
+                    # Prefer annotated mmid for id
+                    mmid = None
+                    if hasattr(tag, 'attrs') and isinstance(tag.attrs, dict):
+                        mmid = tag.attrs.get('mmid')
+                    element_id = mmid if mmid is not None else idx
+
                     # Generate selector
                     selector = self._generate_selector(tag, idx)
                     
                     element = {
-                        'id': idx,
+                        'id': element_id,
                         'tag': tag.name if hasattr(tag, 'name') else 'unknown',
                         'text': text,
                         'selector': selector,
@@ -359,7 +366,7 @@ class DOMDistiller:
                     logger.debug(f"Error extracting element {idx}: {e}")
                     continue
             
-            logger.info(f"✓ Extracted {len(elements)} interactive elements")
+            logger.info(f"Extracted {len(elements)} interactive elements")
             return elements
         
         except Exception as e:
@@ -415,7 +422,7 @@ class DOMDistiller:
                     except Exception:
                         pass
             
-            logger.info(f"✓ Annotated {idx} elements with {prefix} IDs")
+            logger.info(f"yes Annotated {idx} elements with {prefix} IDs")
             return str(soup)
         
         except Exception as e:
@@ -520,5 +527,5 @@ if __name__ == "__main__":
     print(f"Sample: {annotated[:300]}...\n")
     
     print("=" * 70)
-    print("✅ All Tests Completed!")
+    print("yes All Tests Completed!")
     print("=" * 70)

@@ -27,12 +27,12 @@ def download_phobert():
         tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=str(cache_dir))
         model = AutoModel.from_pretrained(model_name, cache_dir=str(cache_dir))
 
-        print(f"✅ PhoBERT downloaded to: {cache_dir}")
+        print(f"yes PhoBERT downloaded to: {cache_dir}")
         print(f"   - Tokenizer vocab size: {tokenizer.vocab_size}")
         print(f"   - Model parameters: {sum(p.numel() for p in model.parameters()):,}")
         return True
     except Exception as e:
-        print(f"❌ Failed to download PhoBERT: {e}")
+        print(f"no Failed to download PhoBERT: {e}")
         return False
 
 
@@ -52,12 +52,12 @@ def download_vit5():
             model_name, cache_dir=str(cache_dir)
         )
 
-        print(f"✅ ViT5 downloaded to: {cache_dir}")
+        print(f"yes ViT5 downloaded to: {cache_dir}")
         print(f"   - Tokenizer vocab size: {tokenizer.vocab_size}")
         print(f"   - Model parameters: {sum(p.numel() for p in model.parameters()):,}")
         return True
     except Exception as e:
-        print(f"❌ Failed to download ViT5: {e}")
+        print(f"no Failed to download ViT5: {e}")
         return False
 
 
@@ -83,12 +83,12 @@ def main():
     print("📊 Download Summary")
     print("=" * 70)
     for model_name, success in results:
-        status = "✅ Success" if success else "❌ Failed"
+        status = "yes Success" if success else "no Failed"
         print(f"{model_name:20s}: {status}")
 
     all_success = all(success for _, success in results)
     if all_success:
-        print("\n🎉 All models downloaded successfully!")
+        print("\ncelebration All models downloaded successfully!")
         print("\nNext steps:")
         print("  1. Run tests: python -m pytest tests/unit/")
         print("  2. Train models (optional): python scripts/training/train_controller.py")

@@ -131,5 +131,5 @@ if __name__ == "__main__":
     logger.error("This is an ERROR message")
     logger.critical("This is a CRITICAL message")
     
-    print("\n✅ Logger test completed!")
-    print(f"✅ Log file created: logs/test.log")
+    print("\nyes Logger test completed!")
+    print(f"yes Log file created: logs/test.log")

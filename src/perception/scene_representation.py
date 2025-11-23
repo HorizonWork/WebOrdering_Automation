@@ -116,7 +116,7 @@ class SceneRepresentation:
             'metadata': metadata or {}
         }
         
-        logger.info(f"✓ Scene created: {len(elements)} elements, DOM: {len(distilled_dom)} chars")
+        logger.info(f"yes Scene created: {len(elements)} elements, DOM: {len(distilled_dom)} chars")
         
         return scene
     
@@ -319,7 +319,7 @@ if __name__ == "__main__":
         metadata={'page_type': 'search'}
     )
     
-    print(f"✓ Scene created")
+    print(f"yes Scene created")
     print(f"  Elements: {len(scene['elements'])}")
     print(f"  DOM size: {scene['dom']['distilled_size']} chars\n")
     
@@ -359,5 +359,5 @@ if __name__ == "__main__":
     print(f"Elements: +{changes['elements_changed']['added']}, -{changes['elements_changed']['removed']}, ~{changes['elements_changed']['modified']}")
     
     print("\n" + "=" * 70)
-    print("✅ All Tests Completed!")
+    print("yes All Tests Completed!")
     print("=" * 70)

@@ -41,14 +41,14 @@ class SafetyGuardrails:
         5. User confirmation for high-risk operations
     
     **Guardrails**:
-        - ❌ Block banking websites
-        - ❌ Block healthcare/medical sites
-        - ❌ Block government portals (payment)
-        - ❌ Block adult content
+        - no Block banking websites
+        - no Block healthcare/medical sites
+        - no Block government portals (payment)
+        - no Block adult content
         - ⚠️  Confirm before payments > threshold
         - ⚠️  Confirm before account changes
         - ⚠️  Limit file uploads
-        - ✅ Allow e-commerce (Shopee, Lazada, etc.)
+        - yes Allow e-commerce (Shopee, Lazada, etc.)
     """
     
     def __init__(
@@ -173,7 +173,7 @@ class SafetyGuardrails:
                 return False
         
         # Allowed
-        logger.debug(f"✅ URL allowed: {url}")
+        logger.debug(f"yes URL allowed: {url}")
         return True
     
     def check_action_allowed(
@@ -291,7 +291,7 @@ class SafetyGuardrails:
     def get_violation_report(self, violations: List[GuardrailViolation]) -> str:
         """Generate violation report"""
         if not violations:
-            return "✅ No guardrail violations"
+            return "yes No guardrail violations"
         
         report = "🚫 Guardrail Violations:\n"
         for i, v in enumerate(violations, 1):
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     
     for url in test_urls:
         allowed = guardrails.check_url_allowed(url)
-        status = "✅ Allowed" if allowed else "🚫 Blocked"
+        status = "yes Allowed" if allowed else "🚫 Blocked"
         print(f"{status}: {url}")
     
     # Test 2: Action checking
@@ -383,7 +383,7 @@ if __name__ == "__main__":
     
     for action in test_actions:
         allowed = guardrails.check_action_allowed(action)
-        status = "✅ Allowed" if allowed else "🚫 Blocked"
+        status = "yes Allowed" if allowed else "🚫 Blocked"
         print(f"{status}: {action['skill']}({action['params']})")
     
     # Test 3: Payment amount
@@ -395,7 +395,7 @@ if __name__ == "__main__":
     
     for amount in test_amounts:
         allowed = guardrails.check_payment_amount(amount)
-        status = "✅ OK" if allowed else "⚠️  Requires confirmation"
+        status = "yes OK" if allowed else "⚠️  Requires confirmation"
         print(f"{status}: {amount:,.0f} VND")
     
     # Test 4: Input validation
@@ -412,7 +412,7 @@ if __name__ == "__main__":
     
     for text in test_inputs:
         safe = guardrails.validate_input_text(text)
-        status = "✅ Safe" if safe else "⚠️  Contains sensitive info"
+        status = "yes Safe" if safe else "⚠️  Contains sensitive info"
         print(f"{status}: {text[:50]}...")
     
     # Test 5: Whitelist
@@ -430,7 +430,7 @@ if __name__ == "__main__":
     
     for url in test_domains:
         whitelisted = guardrails.is_domain_whitelisted(url)
-        status = "✅ Whitelisted" if whitelisted else "⚠️  Not whitelisted"
+        status = "yes Whitelisted" if whitelisted else "⚠️  Not whitelisted"
         print(f"{status}: {url}")
     
     # Test 6: Alternative suggestions
@@ -447,5 +447,5 @@ if __name__ == "__main__":
         print(f"Reason: {alternative['reason']}")
     
     print("\n" + "=" * 70)
-    print("✅ All Tests Completed!")
+    print("yes All Tests Completed!")
     print("=" * 70)

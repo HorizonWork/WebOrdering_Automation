@@ -30,7 +30,7 @@ async def test_perception_layer():
 
         # 2. Scene Representation test bỏ qua (cần ML dependencies)
         print("\n⚠️ Skipping Scene Representation test (requires ML dependencies)")
-        print("DOM Distiller test passed! ✅")
+        print("DOM Distiller test passed! yes")
 
     except Exception as e:
         print(f"PERCEPTION LAYER FAILED: {e}")
